@@ -35,6 +35,8 @@ export const EMOTE_SIZES: readonly Option<OverlaySettings["emotes"]>[] = [
 export const MORE_OPTIONS = [
     "custom",
     "emotes",
+    "gifs",
+    "giflinks",
     "animate",
     "fade",
     "newline",

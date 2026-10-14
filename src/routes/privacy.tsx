@@ -73,11 +73,13 @@ export default function Privacy() {
                 loaded from our Worker: it shows sample messages and opens no chat connection. Its
                 badges and emotes are the real ones, so your browser loads their images from Twitch,
                 7TV and BetterTTV and, with Homies badges switched on, from the Homies hosts, as it
-                would for any overlay page (see "Chat overlay"). Once you have typed a channel, its
-                address carries that channel as well, and the preview asks our gateway for the
-                channel's Twitch badges, so the sample chat wears its subscriber badges. The request
-                for the preview is logged like that of any overlay page (see "Hosting"). Apart from
-                that preview, the start page loads nothing from third parties.
+                would for any overlay page (see "Chat overlay"). It also includes a native GIF
+                example and a direct GIF link from GIPHY; these load only when their respective GIF
+                option is enabled. Once you have typed a channel, its address carries that channel
+                as well, and the preview asks our gateway for the channel's Twitch badges, so the
+                sample chat wears its subscriber badges. The request for the preview is logged like
+                that of any overlay page (see "Hosting"). Apart from that preview, the start page
+                loads nothing from third parties.
             </p>
 
             <h2>Theme</h2>
@@ -121,6 +123,15 @@ export default function Privacy() {
                 details, and for live updates and in the fallback most of them the Twitch channel.
             </p>
             <OverlayServices lang="en" />
+            <p>
+                Native Twitch GIFs load directly from GIPHY unless the overlay link contains gifs=0.
+                Direct GIPHY and Tenor GIF links in messages load only with giflinks=1. GIFs are
+                requested only while visible, without cookies or a referrer, and with browser
+                caching disabled. The provider receives your IP address and browser details; native
+                GIF URLs retain the parameters supplied by Twitch. When a GIF leaves the visible
+                overlay, fades out or is removed, Petal cancels its download and releases its image
+                and temporary blob URL. GIF files are not stored by the relay or gateway.
+            </p>
             <p>
                 Badges of Chatterino Homies are switched off unless the address of the overlay
                 contains homies=1. Only then does your browser load the lists of these badges from

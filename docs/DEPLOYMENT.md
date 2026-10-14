@@ -26,7 +26,7 @@ If the relay or the gateway cannot be reached, the overlay connects to Twitch an
 
 There is one page for visitors: the start page `/`. Its hero ends in the channel field, and the section `#setup` below it holds the look options, the live preview and the personal link, which reflects the channel and the look. The steps for OBS, the way from nothing to chat on screen in short, the features and the questions follow. `/setup` redirects to `/#setup` with status 302.
 
-The overlay lives at `/chat/<channel>` and nowhere else; every path that is not listed above answers with the 404 page. Links to the overlay are in OBS scenes, so the path and the options of a link keep their meaning. The preview on the start page is the overlay itself in a frame, with `demo=1`: sample messages and no chat connection; only the images of its real badges and emotes load from the providers' hosts.
+The overlay lives at `/chat/<channel>` and nowhere else; every path that is not listed above answers with the 404 page. Links to the overlay are in OBS scenes, so the path and the options of a link keep their meaning. The preview on the start page is the overlay itself in a frame, with `demo=1`: sample messages and no chat connection; its real badges, emotes and enabled GIFs load from the providers' hosts. Native and direct-link GIPHY examples let visitors preview both GIF options independently.
 
 ### What streamers need
 
@@ -430,13 +430,16 @@ The options travel in the query string of the overlay link, so they need no stor
 | `nl`       | `1`, `0`                             | `0`      | The message starts on a new line below the name     |
 | `names`    | `1`, `0`                             | `1`      | Show user names                                     |
 | `homies`   | `1`, `0`                             | `0`      | Show Chatterino Homies badges                       |
+| `gifs`     | `1`, `0`                             | `1`      | Show native Twitch GIFs from GIPHY                  |
+| `giflinks` | `1`, `0`                             | `0`      | Show direct GIPHY and Tenor GIF image links         |
 
 `demo=1` and `direct=1` are not part of the look: the first shows sample messages and opens no chat connection, the second bypasses the relay and the gateway.
 
 What operations need to know about them:
 
 - Every overlay page is rendered by the Worker, so the whole link, options included, is in the request log. `ignore` names accounts; the privacy policy says so.
-- `homies=1` is the only option that makes the overlay contact further hosts: the browser loads the badge lists from `chatterinohomies.com` and `itzalex.github.io` and the images from `cdn.chatterinohomies.com` and `itzalex.github.io`, directly and not through the gateway. It is off by default, and without it no request goes to any of them.
+- With `homies=1`, the browser loads the badge lists from `chatterinohomies.com` and `itzalex.github.io` and the images from `cdn.chatterinohomies.com` and `itzalex.github.io`, directly and not through the gateway. It is off by default, and without it no request goes to any of them.
+- Native GIFs load from GIPHY by default (`gifs=0` disables them). Direct GIPHY and Tenor GIF links load only with `giflinks=1`. These browser requests bypass the gateway, omit credentials and referrers, reject redirects and disable HTTP caching. Only visible GIFs load; hidden or removed GIFs cancel downloads and release their blob URLs. See [GIF hosts and limits](../README.md#how-it-works).
 - `custom` names a font of the streamer's computer. Nothing is downloaded for it, and a font that is not installed falls back to `font`.
 - An option is never removed or given another meaning once it has shipped: the links are in OBS scenes.
 

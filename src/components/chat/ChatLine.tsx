@@ -2,11 +2,13 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 
 import type { HomiesBadge } from "~/lib/chat/providers/homies";
 import type { ChatMessage, ChatSession } from "~/lib/chat/session";
+import type { MessagePart } from "~/lib/chat/tokenize";
 import type { Badge } from "~/lib/chat/types";
 import { textScale } from "~/lib/overlay/look";
 
 import styles from "./Chat.module.css";
 import EmoteView, { ChatImage } from "./EmoteView";
+import GifView from "./GifView";
 import { useSettings } from "./settings";
 import Username from "./Username";
 
@@ -38,16 +40,29 @@ export default function ChatLine(props: {
     homies?: readonly HomiesBadge[];
 }) {
     const settings = useSettings();
-    const parts = createMemo(() => props.session.parts(props.message));
+    const parts = createMemo<MessagePart[]>(
+        (previous) => props.session.parts(props.message, previous),
+        [],
+    );
     const badges = createMemo((): (Badge | HomiesBadge)[] => {
         if (!settings().badges) return [];
         const homies = settings().homies ? (props.homies ?? []) : [];
         return [...props.session.badges(props.message), ...homies];
     });
     const user = () => props.session.user(props.message);
+    const [faded, setFaded] = createSignal(false);
 
     return (
-        <div class={styles.line}>
+        <div
+            class={styles.line}
+            onAnimationEnd={(event) => {
+                if (
+                    event.target === event.currentTarget &&
+                    getComputedStyle(event.currentTarget).opacity === "0"
+                )
+                    setFaded(true);
+            }}
+        >
             <Show when={props.message.system}>
                 <div class={styles.system}>{props.message.system}</div>
             </Show>
@@ -76,6 +91,20 @@ export default function ChatLine(props: {
                             if (part.type === "text") return part.text;
                             if (part.type === "mention") {
                                 return <span class={styles.mention}>{part.text}</span>;
+                            }
+                            if (part.type === "gif") {
+                                return (
+                                    <Show
+                                        when={
+                                            part.source === "twitch"
+                                                ? settings().gifs
+                                                : settings().giflinks
+                                        }
+                                        fallback={part.text}
+                                    >
+                                        <GifView part={part} faded={faded()} />
+                                    </Show>
+                                );
                             }
                             return <EmoteView part={part} />;
                         }}

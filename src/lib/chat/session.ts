@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 
 import { EmoteSet } from "./emote-set";
+import { type GifRange, parseGifsTag } from "./gifs";
 import { type IrcStatus, TwitchIrc } from "./irc/client";
 import {
     type BadgeRef,
@@ -63,6 +64,7 @@ export interface ChatMessage {
     action: boolean;
     text: string;
     emoteRanges: EmoteRange[];
+    gifRanges?: GifRange[];
     badgeRefs: BadgeRef[];
     /** USERNOTICE text such as "x subscribed with Prime." */
     system?: string;
@@ -623,6 +625,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
             action,
             text,
             emoteRanges: parseEmotesTag(tags.emotes),
+            gifRanges: parseGifsTag(tags.gifs),
             badgeRefs: parseBadgesTag(
                 shared ? (tags["source-badges"] ?? tags.badges) : tags.badges,
             ),
@@ -661,7 +664,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
     });
 
     /** Message parts; re-derived when any emote source the message draws from changes. */
-    function parts(message: ChatMessage): MessagePart[] {
+    function parts(message: ChatMessage, previous: readonly MessagePart[] = []): MessagePart[] {
         // Read purely to subscribe: global/room set changes, and this user's personal emotes.
         emotesVersion();
         void state.users[message.userId]?.personalEmotes;
@@ -679,13 +682,19 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
             ...global.ffzDefaultSets.map((id) => ffzSets.get(id)),
         ].filter((set) => set !== undefined);
 
-        return tokenize(message.text, message.emoteRanges, (name) => {
-            for (const set of sets) {
-                const emote = set.get(name);
-                if (emote) return emote;
-            }
-            return undefined;
-        });
+        return tokenize(
+            message.text,
+            message.emoteRanges,
+            (name) => {
+                for (const set of sets) {
+                    const emote = set.get(name);
+                    if (emote) return emote;
+                }
+                return undefined;
+            },
+            message.gifRanges,
+            previous,
+        );
     }
 
     /** Badges in display order; re-derived when badge data or the user's cosmetics change. */

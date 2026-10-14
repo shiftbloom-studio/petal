@@ -52,6 +52,38 @@ export const overlayServices: readonly OverlayService[] = [
         policy: true,
     },
     {
+        name: "GIPHY",
+        purpose: {
+            en: "native Twitch GIFs (on by default) and direct GIF links (off by default)",
+            de: "native Twitch-GIFs (standardmäßig an) und direkte GIF-Links (standardmäßig aus)",
+        },
+        direct: images,
+        hosts: [
+            "media.giphy.com",
+            "media0.giphy.com",
+            "media1.giphy.com",
+            "media2.giphy.com",
+            "media3.giphy.com",
+            "media4.giphy.com",
+            "i.giphy.com",
+        ],
+        fallbackHosts: [],
+        url: "https://support.giphy.com/hc/en-us/articles/360032872931-GIPHY-Privacy-Policy",
+        policy: true,
+    },
+    {
+        name: "Tenor",
+        purpose: {
+            en: "direct GIF links, only with giflinks=1",
+            de: "direkte GIF-Links, nur mit giflinks=1",
+        },
+        direct: images,
+        hosts: ["media.tenor.com"],
+        fallbackHosts: [],
+        url: "https://policies.google.com/privacy",
+        policy: true,
+    },
+    {
         name: "IVR",
         purpose: { en: "the list of Twitch badges", de: "die Liste der Twitch-Badges" },
         direct: fallbackOnly,

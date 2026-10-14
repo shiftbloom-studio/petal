@@ -101,11 +101,13 @@ shows the default look. Unknown and invalid values fall back to the default.
 | `custom`   | A font name of up to 40 characters: letters, digits, space, hyphen, underscore, dot | none | A font installed on the computer that shows the overlay. It comes before `font`, which stays the fallback. Nothing is downloaded for it |
 | `nl`       | `1`, `0`                                       | `0`      | The message starts on a new line below the name            |
 | `names`    | `1`, `0`                                       | `1`      | Show user names                                            |
-| `homies`   | `1`, `0`                                       | `0`      | Show Chatterino Homies badges, if `badges` is on. The only option that makes the overlay contact further hosts, see [How it works](#how-it-works) |
+| `homies`   | `1`, `0`                                       | `0`      | Show Chatterino Homies badges, if `badges` is on, see [How it works](#how-it-works) |
+| `gifs`     | `1`, `0`                                       | `1`      | Show native Twitch GIFs, loaded from GIPHY |
+| `giflinks` | `1`, `0`                                       | `0`      | Show direct GIPHY and Tenor GIF image links in messages |
 
 Two more parameters are not part of the look. `demo=1` shows sample messages instead of a
-channel's chat and opens no chat connection, though its real badges and emotes load from the
-providers' image hosts; the preview on the start page uses it. `direct=1` makes
+channel's chat and opens no chat connection, though its real badges, emotes and enabled GIFs load
+from the providers' image hosts; the preview on the start page uses it. `direct=1` makes
 the overlay connect to Twitch and the emote services itself instead of using Petal's relay and
 cache.
 
@@ -119,6 +121,15 @@ cache.
   arrive through Petal's data gateway, which fetches them from the services and caches them. The
   services do not see your IP address for these requests.
 - **Images and live updates** are loaded by the browser from the services themselves.
+- **GIFs** from Twitch's GIF keyboard appear inline by default; `gifs=0` keeps their text instead.
+  `giflinks=1` additionally embeds direct HTTPS `.gif` links from `media.giphy.com`,
+  `media0.giphy.com` through `media4.giphy.com`, `i.giphy.com` and `media.tenor.com`. Share pages
+  stay text. GIFs fit within 320 × 240 pixels and the overlay width, keeping their aspect ratio.
+  Only visible GIFs load, without cookies, referrers, redirects or HTTP caching. Downloads time
+  out after 10 seconds and are limited to 5 MiB, 1,048,576 pixels per frame, 300 frames and
+  67,108,864 total frame pixels. Invalid or unavailable images fall back to their original text.
+  Leaving the visible overlay, fading out, moderation and removal cancel downloads and release
+  image elements and blob URLs; final memory reclamation is managed by the browser.
 - **Chatterino Homies badges** are off by default. With `homies=1` and `badges` on, the browser
   loads their lists and images from `chatterinohomies.com`, `cdn.chatterinohomies.com` and
   `itzalex.github.io`.

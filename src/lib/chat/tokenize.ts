@@ -5,6 +5,7 @@ import {
     FfzFlag,
     NO_EFFECTS,
 } from "./effects";
+import { type GifRange, isGifUrl } from "./gifs";
 import type { EmoteRange } from "./irc/parse";
 import { twitchEmote } from "./providers/twitch";
 import type { Emote } from "./types";
@@ -17,9 +18,18 @@ export interface EmotePart {
     effects: EmoteEffects;
 }
 
+export interface GifPart {
+    type: "gif";
+    source: "twitch" | "link";
+    url: string;
+    /** Original chat text, also used when disabled or when the image cannot be loaded. */
+    text: string;
+}
+
 export type MessagePart =
     | { type: "text"; text: string }
     | { type: "mention"; text: string }
+    | GifPart
     | EmotePart;
 
 export type EmoteLookup = (name: string) => Emote | undefined;
@@ -28,11 +38,12 @@ interface Atom {
     word: string;
     /** Set for Twitch emotes, which come pre-located in the IRC tags. */
     emote?: Emote;
+    gif?: string;
     spaceBefore: boolean;
 }
 
-/** Splits a message into space-separated words, cutting Twitch emotes out at their ranges. */
-function atomize(text: string, ranges: EmoteRange[]): Atom[] {
+/** Splits a message into words, cutting native Twitch emotes and GIFs out at their ranges. */
+function atomize(text: string, ranges: EmoteRange[], gifs: GifRange[]): Atom[] {
     // Twitch counts code points, not UTF-16 units, so emoji before an emote shift nothing.
     const chars = Array.from(text);
     const atoms: Atom[] = [];
@@ -48,11 +59,15 @@ function atomize(text: string, ranges: EmoteRange[]): Atom[] {
     };
 
     let cursor = 0;
-    for (const range of ranges) {
+    for (const range of [...ranges, ...gifs].sort((a, b) => a.start - b.start)) {
         if (range.start < cursor || range.end < range.start || range.end >= chars.length) continue;
         pushWords(chars.slice(cursor, range.start).join(""));
         const name = chars.slice(range.start, range.end + 1).join("");
-        atoms.push({ word: name, emote: twitchEmote(range.id, name), spaceBefore: space });
+        atoms.push({
+            word: name,
+            ...("url" in range ? { gif: range.url } : { emote: twitchEmote(range.id, name) }),
+            spaceBefore: space,
+        });
         space = false;
         cursor = range.end + 1;
     }
@@ -61,14 +76,24 @@ function atomize(text: string, ranges: EmoteRange[]): Atom[] {
 }
 
 /**
- * Turns a chat message into text, mention and emote parts. Third-party emotes are matched per
+ * Turns a chat message into text, mention, GIF and emote parts. Third-party emotes are matched per
  * word through `lookup`, which decides provider priority. On top of that:
  * - zero-width emotes (7TV, BTTV) stack onto the preceding emote;
  * - FFZ modifier emotes (`ffzX`, `ffzHyper`, ...) apply their flags to the preceding emote;
  * - BTTV prefix modifiers (`w! h! Kappa`) apply to the next emote, or stay text without one.
  */
-export function tokenize(text: string, ranges: EmoteRange[], lookup: EmoteLookup): MessagePart[] {
+export function tokenize(
+    text: string,
+    ranges: EmoteRange[],
+    lookup: EmoteLookup,
+    gifs: GifRange[] = [],
+    previous: readonly MessagePart[] = [],
+): MessagePart[] {
     const parts: MessagePart[] = [];
+    // Emote updates can split text into more parts. Match GIFs by occurrence, not part index,
+    // so Solid's keyed list retains their downloads, dimensions and animation state.
+    const previousGifs = previous.filter((part) => part.type === "gif");
+    let gifIndex = 0;
     let base: EmotePart | undefined;
     let prefixes: Atom[] = [];
 
@@ -95,7 +120,21 @@ export function tokenize(text: string, ranges: EmoteRange[], lookup: EmoteLookup
         if (!previous.text) parts.splice(index - 1, 1);
     };
 
-    for (const atom of atomize(text, ranges)) {
+    for (const atom of atomize(text, ranges, gifs)) {
+        const gif = atom.gif ?? (!atom.emote && isGifUrl(atom.word) ? atom.word : undefined);
+        if (gif) {
+            flushPrefixes();
+            pushSpace(atom);
+            const source = atom.gif ? "twitch" : "link";
+            const old = previousGifs[gifIndex++];
+            parts.push(
+                old?.source === source && old.url === gif && old.text === atom.word
+                    ? old
+                    : { type: "gif", source, url: gif, text: atom.word },
+            );
+            base = undefined;
+            continue;
+        }
         const emote = atom.emote ?? lookup(atom.word);
 
         if (emote?.bttvModifier) {
