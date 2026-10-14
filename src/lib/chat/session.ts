@@ -664,7 +664,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
     });
 
     /** Message parts; re-derived when any emote source the message draws from changes. */
-    function parts(message: ChatMessage): MessagePart[] {
+    function parts(message: ChatMessage, previous: readonly MessagePart[] = []): MessagePart[] {
         // Read purely to subscribe: global/room set changes, and this user's personal emotes.
         emotesVersion();
         void state.users[message.userId]?.personalEmotes;
@@ -693,6 +693,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
                 return undefined;
             },
             message.gifRanges,
+            previous,
         );
     }
 

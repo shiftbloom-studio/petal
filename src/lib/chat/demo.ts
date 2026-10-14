@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 
+import type { GifRange } from "./gifs";
 import type { HomiesBadge, HomiesBadges } from "./providers/homies";
 import type { Paint } from "./providers/seventv/paint";
 import type { ChatMessage, ChatSession } from "./session";
@@ -22,7 +23,7 @@ import {
 
 // The real images, from the hosts an overlay page loads them from anyway (see the privacy
 // policy, "Chat overlay"): Twitch's global badges and emotes, emotes of the 7TV and BetterTTV
-// global sets, and a shared Homies badge. Nothing is invented and nothing ships with the site.
+// global sets, a shared Homies badge, and a GIPHY GIF. Nothing ships with the site.
 const TWITCH_BADGES = "https://static-cdn.jtvnw.net/badges/v1";
 const SEVENTV_CDN = "https://cdn.7tv.app/emote";
 
@@ -128,9 +129,12 @@ const lurker: Chatter = { name: "hazel_newt", color: "#ff4500", badges: [] };
 interface Sample {
     chatter: Chatter;
     text: string;
+    gifRanges?: GifRange[];
     action?: boolean;
     system?: string;
 }
+
+const GIF_URL = "https://media1.giphy.com/media/p3hZ9PbhVBO9gM6LoE/giphy.gif?cid=twitch&ct=g";
 
 const SAMPLES: Sample[] = [
     { chatter: mod, text: "Welcome in, everyone HeyGuys" },
@@ -140,8 +144,14 @@ const SAMPLES: Sample[] = [
         chatter: regular,
         text: "I have been watching for two hours, I still do not understand the rules of this game, and I am having a great time",
     },
-    { chatter: painted, text: "<3 <3 <3" },
     { chatter: bot, text: "Enjoying the stream? Follow the channel, so you never miss one." },
+    {
+        chatter: painted,
+        text: "[GIF]",
+        gifRanges: [{ start: 0, end: 4, url: GIF_URL }],
+    },
+    { chatter: vip, text: GIF_URL },
+    { chatter: painted, text: "<3 <3 <3" },
     { chatter: lurker, text: "!uptime" },
     { chatter: subscriber, text: "that was so close PogChamp" },
     { chatter: vip, text: "clip it, someone clip it LUL SourPls" },
@@ -172,8 +182,8 @@ const PAUSES = [1200, 1800, 1000, 1600, 2000, 1400];
 const MAX_MESSAGES = 100;
 
 /**
- * A chat session without a chat: it repeats a dozen invented messages and opens no connection.
- * Only its badge and emote images are loaded, from the hosts of the real ones. The start page
+ * A chat session without a chat: it repeats invented messages and opens no connection.
+ * Its badge, emote and enabled GIF images load from the same hosts as real chat. The start page
  * previews the overlay with it, and a streamer can arrange a scene with it while the channel is
  * offline.
  */
@@ -218,7 +228,7 @@ export function createDemoSession(options: DemoOptions = {}): ChatSession {
     }
 
     function addNext() {
-        const { chatter, text, action, system } = SAMPLES[count % SAMPLES.length];
+        const { chatter, text, gifRanges, action, system } = SAMPLES[count % SAMPLES.length];
         const login = chatter.name.toLowerCase();
         const message: ChatMessage = {
             id: `demo-${count}`,
@@ -230,6 +240,7 @@ export function createDemoSession(options: DemoOptions = {}): ChatSession {
             action: action ?? false,
             text,
             emoteRanges: [],
+            gifRanges,
             badgeRefs: chatter.badges.map((ref) => {
                 const [set, version] = ref.split("/") as [string, string];
                 return { set, version };
@@ -248,8 +259,14 @@ export function createDemoSession(options: DemoOptions = {}): ChatSession {
 
     return {
         state,
-        parts: (message: ChatMessage): MessagePart[] =>
-            tokenize(message.text, message.emoteRanges, (name) => EMOTES.get(name)),
+        parts: (message: ChatMessage, previous: readonly MessagePart[] = []): MessagePart[] =>
+            tokenize(
+                message.text,
+                message.emoteRanges,
+                (name) => EMOTES.get(name),
+                message.gifRanges,
+                previous,
+            ),
         badges: (message: ChatMessage): Badge[] =>
             message.badgeRefs.flatMap((ref) => badge(ref.set, ref.version) ?? []),
         paint: (message: ChatMessage) => CHATTERS.get(message.userId)?.paint,

@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 
 import type { HomiesBadge } from "~/lib/chat/providers/homies";
 import type { ChatMessage, ChatSession } from "~/lib/chat/session";
+import type { MessagePart } from "~/lib/chat/tokenize";
 import type { Badge } from "~/lib/chat/types";
 import { textScale } from "~/lib/overlay/look";
 
@@ -39,7 +40,10 @@ export default function ChatLine(props: {
     homies?: readonly HomiesBadge[];
 }) {
     const settings = useSettings();
-    const parts = createMemo(() => props.session.parts(props.message));
+    const parts = createMemo<MessagePart[]>(
+        (previous) => props.session.parts(props.message, previous),
+        [],
+    );
     const badges = createMemo((): (Badge | HomiesBadge)[] => {
         if (!settings().badges) return [];
         const homies = settings().homies ? (props.homies ?? []) : [];

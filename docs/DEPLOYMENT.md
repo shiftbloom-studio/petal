@@ -26,7 +26,7 @@ If the relay or the gateway cannot be reached, the overlay connects to Twitch an
 
 There is one page for visitors: the start page `/`. Its hero ends in the channel field, and the section `#setup` below it holds the look options, the live preview and the personal link, which reflects the channel and the look. The steps for OBS, the way from nothing to chat on screen in short, the features and the questions follow. `/setup` redirects to `/#setup` with status 302.
 
-The overlay lives at `/chat/<channel>` and nowhere else; every path that is not listed above answers with the 404 page. Links to the overlay are in OBS scenes, so the path and the options of a link keep their meaning. The preview on the start page is the overlay itself in a frame, with `demo=1`: sample messages and no chat connection; only the images of its real badges and emotes load from the providers' hosts.
+The overlay lives at `/chat/<channel>` and nowhere else; every path that is not listed above answers with the 404 page. Links to the overlay are in OBS scenes, so the path and the options of a link keep their meaning. The preview on the start page is the overlay itself in a frame, with `demo=1`: sample messages and no chat connection; its real badges, emotes and enabled GIFs load from the providers' hosts. Native and direct-link GIPHY examples let visitors preview both GIF options independently.
 
 ### What streamers need
 

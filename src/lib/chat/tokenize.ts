@@ -87,8 +87,13 @@ export function tokenize(
     ranges: EmoteRange[],
     lookup: EmoteLookup,
     gifs: GifRange[] = [],
+    previous: readonly MessagePart[] = [],
 ): MessagePart[] {
     const parts: MessagePart[] = [];
+    // Emote updates can split text into more parts. Match GIFs by occurrence, not part index,
+    // so Solid's keyed list retains their downloads, dimensions and animation state.
+    const previousGifs = previous.filter((part) => part.type === "gif");
+    let gifIndex = 0;
     let base: EmotePart | undefined;
     let prefixes: Atom[] = [];
 
@@ -120,12 +125,13 @@ export function tokenize(
         if (gif) {
             flushPrefixes();
             pushSpace(atom);
-            parts.push({
-                type: "gif",
-                source: atom.gif ? "twitch" : "link",
-                url: gif,
-                text: atom.word,
-            });
+            const source = atom.gif ? "twitch" : "link";
+            const old = previousGifs[gifIndex++];
+            parts.push(
+                old?.source === source && old.url === gif && old.text === atom.word
+                    ? old
+                    : { type: "gif", source, url: gif, text: atom.word },
+            );
             base = undefined;
             continue;
         }

@@ -73,11 +73,13 @@ export default function Privacy() {
                 loaded from our Worker: it shows sample messages and opens no chat connection. Its
                 badges and emotes are the real ones, so your browser loads their images from Twitch,
                 7TV and BetterTTV and, with Homies badges switched on, from the Homies hosts, as it
-                would for any overlay page (see "Chat overlay"). Once you have typed a channel, its
-                address carries that channel as well, and the preview asks our gateway for the
-                channel's Twitch badges, so the sample chat wears its subscriber badges. The request
-                for the preview is logged like that of any overlay page (see "Hosting"). Apart from
-                that preview, the start page loads nothing from third parties.
+                would for any overlay page (see "Chat overlay"). It also includes a native GIF
+                example and a direct GIF link from GIPHY; these load only when their respective GIF
+                option is enabled. Once you have typed a channel, its address carries that channel
+                as well, and the preview asks our gateway for the channel's Twitch badges, so the
+                sample chat wears its subscriber badges. The request for the preview is logged like
+                that of any overlay page (see "Hosting"). Apart from that preview, the start page
+                loads nothing from third parties.
             </p>
 
             <h2>Theme</h2>

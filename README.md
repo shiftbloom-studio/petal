@@ -106,8 +106,8 @@ shows the default look. Unknown and invalid values fall back to the default.
 | `giflinks` | `1`, `0`                                       | `0`      | Show direct GIPHY and Tenor GIF image links in messages |
 
 Two more parameters are not part of the look. `demo=1` shows sample messages instead of a
-channel's chat and opens no chat connection, though its real badges and emotes load from the
-providers' image hosts; the preview on the start page uses it. `direct=1` makes
+channel's chat and opens no chat connection, though its real badges, emotes and enabled GIFs load
+from the providers' image hosts; the preview on the start page uses it. `direct=1` makes
 the overlay connect to Twitch and the emote services itself instead of using Petal's relay and
 cache.
 
