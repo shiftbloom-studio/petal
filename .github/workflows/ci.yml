@@ -10,28 +10,17 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels its running checks. Pushes to main queue instead, so a
-# deployment that has begun is never cancelled.
+# Cancel superseded checks. Cloudflare Workers Builds handles production deployments.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   check:
     # Branch protection requires this check by its name, so the name must not change. The job
     # has no `if:`: a job skipped by a condition reports success, even as a required check.
     name: Typecheck, lint, test, build
-    # Code from `main` runs on our self-hosted runners, everything else on GitHub's runners,
-    # which are free for a public repository. A pull request runs this file as it changed it, so
-    # nothing written here can keep a pull request off our runners; only settings on GitHub can.
-    # See "10. Protect main and the CI runners" in docs/DEPLOYMENT.md.
-    # A plain scalar over three lines, which YAML folds into one expression. GitHub's parser for
-    # editors (@actions/workflow-parser) reads a quoted or block scalar over several lines as
-    # text around the expression, which would turn the object into a string. A plain scalar
-    # cannot contain ": ", hence the JSON without spaces.
-    runs-on: ${{ github.ref == 'refs/heads/main'
-      && fromJSON('{"group":"Default","labels":["self-hosted","linux","x64"]}')
-      || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       # Actions are pinned to a commit, because a tag can be moved to other code. The comment
@@ -62,41 +51,3 @@ jobs:
 
       - name: Build
         run: pnpm build
-
-  deploy:
-    name: Deploy to Cloudflare
-    needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on:
-      group: Default
-      labels: [self-hosted, linux, x64]
-    timeout-minutes: 15
-    environment:
-      name: production
-      url: https://petal.shiftbloom.studio
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      # Writes the Worker to .output/server and merges wrangler.jsonc into the configuration
-      # that Wrangler deploys. See docs/DEPLOYMENT.md.
-      - name: Build
-        run: pnpm build
-
-      - name: Deploy
-        run: npx wrangler@4 deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_SEND_METRICS: "false"

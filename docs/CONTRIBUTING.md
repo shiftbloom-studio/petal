@@ -94,9 +94,10 @@ blanks an overlay.
 
 `.github/workflows/ci.yml` installs dependencies with the frozen lockfile, then runs typecheck,
 `biome ci`, the tests and a build. It runs for pushes and pull requests to `main`, and on demand.
-Runs of `main` use our self-hosted runners; pull requests, from forks too, run on GitHub's runners.
+All runs use GitHub-hosted runners; no local runner is needed.
 Actions are pinned to commits. Renovate keeps dependencies and those pins current.
 
-On a push to `main`, the job `deploy` deploys to Cloudflare once the checks have passed. See
-[DEPLOYMENT.md](DEPLOYMENT.md#releasing) and, for the settings that keep pull requests off our
-runners, [Protect main and the CI runners](DEPLOYMENT.md#10-protect-main-and-the-ci-runners).
+Cloudflare Workers Builds deploys pushes to `main`. Its `pnpm build:cloudflare` command installs
+the frozen lockfile and runs the same checks and build before deployment, independently of
+GitHub Actions. See [DEPLOYMENT.md](DEPLOYMENT.md#releasing) and
+[Protect main](DEPLOYMENT.md#10-protect-main).
