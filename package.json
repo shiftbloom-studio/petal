@@ -20,6 +20,7 @@
   "scripts": {
     "dev": "node scripts/fontshare.ts && vite dev",
     "build": "node scripts/fontshare.ts && vite build",
+    "build:cloudflare": "pnpm install --frozen-lockfile && pnpm typecheck && pnpm exec biome ci && pnpm test && pnpm build",
     "typecheck": "tsc && tsc -p tsconfig.worker.json",
     "lint": "biome check",
     "format": "biome check --write",

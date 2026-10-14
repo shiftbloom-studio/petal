@@ -1,6 +1,6 @@
 # Deployment
 
-Petal runs entirely on Cloudflare, as one Worker with static assets, a Durable Object class and a KV namespace. Nothing is self-hosted, and no Cloudflare tooling is needed on a developer machine: GitHub Actions builds the app and deploys it with Wrangler on every push to `main`.
+Petal runs entirely on Cloudflare, as one Worker with static assets, a Durable Object class and a KV namespace. Cloudflare Workers Builds checks, builds and deploys every push to `main`. No local checkout or self-hosted runner is needed. GitHub Actions provides the pull request checks on GitHub-hosted runners.
 
 How the relay and the data gateway work is described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -51,18 +51,30 @@ Analytics Engine has to be switched on once per account, or every deployment tha
 
 No dataset has to be created. The first data point creates `petal_relay`.
 
-### 3. Let GitHub Actions deploy
+### 3. Connect Cloudflare Workers Builds
 
-The job `deploy` of `.github/workflows/ci.yml` runs on every push to `main` once the checks of the job `check` have passed. It builds the app and runs `npx wrangler@4 deploy`, which deploys the Worker named in `wrangler.jsonc`. The job needs two values from the organization's settings under **Settings > Secrets and variables > Actions**, both restricted to the repository `petal`:
+For an existing GitHub Actions deployment, merge the workflow change that removes the `deploy` job before enabling Workers Builds, and cancel queued runs of the old workflow. This avoids duplicate deployments if an old runner comes back online.
 
-| Name                    | Kind     | Value                                                     |
-| ----------------------- | -------- | --------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | Secret   | An API token created under **My Profile > API Tokens** with these permissions and no others: Account > Workers Scripts > Edit, Account > Workers KV Storage > Edit, Account > Account Settings > Read, User > User Details > Read. Account resources: this account only. No zone resources: the domains are attached in the dashboard, not by the deployment |
-| `CLOUDFLARE_ACCOUNT_ID` | Variable | The account id, shown in the right column of **Workers & Pages** |
+Open the existing **Workers & Pages > petal > Settings > Build** and connect `shiftbloom-studio/petal`. Authorize Cloudflare's GitHub integration for this repository if prompted. Configure:
 
-Do not connect the repository under **Workers & Pages > Create application > Import a repository** as well: every push would then be deployed twice. A connection that exists is removed under **Workers & Pages > petal > Settings > Build**.
+| Setting | Value |
+| ------- | ----- |
+| Production branch | `main` |
+| Root directory | Repository root (`/`) |
+| Build command | `pnpm run build:cloudflare` |
+| Deploy command | `npx wrangler@4 deploy` |
+| Enable Preview Builds | Off |
+| Build variable `PNPM_VERSION` | `12.8.1` |
+| Build variable `SKIP_DEPENDENCY_INSTALL` | `1` |
+| Build variable `WRANGLER_SEND_METRICS` | `false` |
 
-The Node.js version comes from `.node-version`. The pnpm version is recorded in two places that must agree: `packageManager` in `package.json` and `pnpm-lock.yaml` (run `pnpm install` after changing the version).
+Choose the deployment API token in Cloudflare's build settings. The GitHub Actions secret `CLOUDFLARE_API_TOKEN` and variable `CLOUDFLARE_ACCOUNT_ID` are no longer used by this repository. Existing domains, bindings and migrations stay with the Worker `petal`.
+
+The build command installs the frozen lockfile, runs type checks, `biome ci`, tests and the production build. A failed step stops deployment. Nitro writes `.output/server/wrangler.json` and Wrangler's configuration redirect, so the deploy command runs from the repository root.
+
+Node.js comes from `.node-version`. Keep `PNPM_VERSION` in Cloudflare aligned with `packageManager` in `package.json` and the lockfile after pnpm upgrades. Automatic dependency installation is skipped because `build:cloudflare` performs it explicitly.
+
+Save the settings and start the first build. To rebuild without a commit, open the latest production build in Cloudflare and select **Retry build**. Retrying uses the current build settings. See Cloudflare's [build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) and [build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/) documentation.
 
 ### What a deployment creates
 
@@ -172,30 +184,26 @@ sooner:
 
 After changing what the start page says, see [SEO.md](SEO.md).
 
-### 10. Protect main and the CI runners
+### 10. Protect main
 
-`.github/workflows/ci.yml` runs the check `Typecheck, lint, test, build` for every push and every pull request to `main`. Runs of `main` itself, pushes and manual runs, use the organization's self-hosted runners (group `Default`, labels `self-hosted`, `linux`, `x64`). Everything else, pull requests from forks included, runs on GitHub's runners, which cost nothing for a public repository.
+`.github/workflows/ci.yml` runs `Typecheck, lint, test, build` for pushes and pull requests to `main`, and on demand. All runs use `ubuntu-latest` on GitHub. The workflow has no deployment credentials.
 
-The workflow file cannot keep a pull request off the self-hosted runners. GitHub runs a pull request's workflow as the pull request changed it, so a fork can ask for the runners in its copy of `ci.yml`. A condition in the file is no help either: a job skipped by `if:` reports success, and a required check passes with it. These settings on GitHub do the rest:
+In a ruleset for `main` (**Settings > Rules > Rulesets**) or a branch protection rule (**Settings > Branches**), require `Typecheck, lint, test, build` with **GitHub Actions** as its source. Keep this check name unchanged. Read changes to `.github/` before approving or merging them: a pull request runs its own version of the workflow.
 
-1. **Approve every outside contributor's run.** In the repository, open **Settings > Actions > General**. Under **Approval for running fork pull request workflows from contributors**, choose **Require approval for all external contributors** and select **Save**. A fork's pull request then runs nothing until someone with write access approves it. Read its changes to `.github/` first: an approved run executes the workflow as the pull request wrote it. The two options for first-time contributors are not enough, because one merged pull request, even a typo fix, ends that status.
-2. **Give the runners to this repository only.** In the organization, open **Settings > Actions > Runner groups** and select `Default`. Under **Repository access**, choose **Selected repositories**, select `petal` and then **Save group**. **Allow public repositories** has to stay on, or `main` cannot use the runners either. If the runners move to a group of their own, its name replaces `Default` in `ci.yml`.
-3. **Limit the runners to `ci.yml` on `main`.** Only possible if the organization is on GitHub Enterprise Cloud: GitHub offers **Workflow access** for runner groups on no other plan. Under **Workflow access** of the same group, choose **Selected workflows** and enter `shiftbloom-studio/petal/.github/workflows/ci.yml@refs/heads/main`. A pull request runs its workflow from its own ref, so it can no longer reach the runners, approved or not.
-4. **Require the check.** In a branch ruleset for `main` (**Settings > Rules > Rulesets**) or a branch protection rule (**Settings > Branches**), select **Require status checks to pass before merging** and add `Typecheck, lint, test, build` with **GitHub Actions** as its source, so that no other app can report it. The job `deploy` only runs after the check has passed on `main`, but the rule keeps a failing pull request from being merged in the first place. The check is required by its name: renaming the job in `ci.yml` without changing the rule leaves every pull request waiting for a check that never comes. A pull request that changes `ci.yml` is checked by its own version of the file, so for such a pull request a passing check proves nothing until the change is read.
-
-Without step 3, a pull request that someone approves can still ask for the self-hosted runners. GitHub recommends self-hosted runners only for private repositories. Keep nothing on the runner machines that a pull request must not read, or keep the runners away from this repository altogether: `runs-on: ubuntu-latest` for `main` as well, and `petal` removed from the group's repository access. Changing `ci.yml` alone is not enough, because a pull request can ask for any runner that the repository may use.
+Keep **Require approval for all external contributors** under **Settings > Actions > General**. Remove `petal` from the self-hosted runner group's repository access under the organization's **Settings > Actions > Runner groups**; changing `runs-on` alone does not revoke access to those runners.
 
 ## Releasing
 
 | Action                   | Result                                                       |
 | ------------------------ | ------------------------------------------------------------ |
-| Push to `main`           | GitHub Actions runs the checks, builds and deploys to production. Every overlay reconnects |
+| Push to `main`           | Cloudflare runs the checks, builds and deploys to production. Every overlay reconnects |
 | Push to any other branch | Nothing is deployed. Pull requests to `main` run the checks |
+| Rebuild without a commit | Retry the latest production build in Cloudflare |
 | Roll back                | **Workers & Pages > petal > Deployments**, then roll back to an earlier version. Not possible to a version from before the relay |
 
-GitHub Actions runs type checks, linting, tests and a build for pushes and pull requests to `main` (`.github/workflows/ci.yml`), pull requests from forks included; they run on GitHub's runners, see [Protect main and the CI runners](#10-protect-main-and-the-ci-runners). On a push to `main` the job `deploy` follows once those checks have passed, so a commit that fails them is not deployed. Deployments run one at a time and are never cancelled by a later push.
+Cloudflare runs `pnpm build:cloudflare` before `npx wrangler@4 deploy`. This repeats the GitHub checks in the deployment environment, so a failed check prevents deployment even if GitHub Actions is unavailable. Running the GitHub workflow manually only runs checks; use Cloudflare to rebuild and deploy.
 
-Preview builds of branches exist only with Cloudflare's own build service, which is not connected. The `previews` block in `wrangler.jsonc` describes what such a preview would need (the `CHAT_HUB` binding, the version metadata and the variables, with one shard) and does nothing until one is. A preview URL would be public and outside the zone's rules, so `preview_urls` is `false`, see [Keep the Worker off other hostnames](#6-keep-the-worker-off-other-hostnames).
+Preview builds stay disabled in Cloudflare's branch control. The existing `previews` block in `wrangler.jsonc` does not enable them. Keep `workers_dev` and `preview_urls` set to `false`, as described in [Keep the Worker off other hostnames](#6-keep-the-worker-off-other-hostnames).
 
 ## Operations
 
