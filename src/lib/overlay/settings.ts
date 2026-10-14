@@ -46,6 +46,10 @@ export interface OverlaySettings {
     names: boolean;
     /** Show Homies badges, which the overlay has to ask a third party for. */
     homies: boolean;
+    /** Native GIFs selected with Twitch's GIF keyboard. */
+    gifs: boolean;
+    /** Direct GIPHY and Tenor GIF links in ordinary message text. */
+    giflinks: boolean;
 }
 
 // Fonts the site serves itself (declared in brand.css and app.css) and system font stacks: the
@@ -79,6 +83,8 @@ export const DEFAULT_SETTINGS: OverlaySettings = {
     newline: false,
     names: true,
     homies: false,
+    gifs: true,
+    giflinks: false,
 };
 
 export const MAX_FADE = 600;
@@ -145,6 +151,8 @@ export function parseSettings(params: URLSearchParams): OverlaySettings {
         newline: flag(params.get("nl"), DEFAULT_SETTINGS.newline),
         names: flag(params.get("names"), DEFAULT_SETTINGS.names),
         homies: flag(params.get("homies"), DEFAULT_SETTINGS.homies),
+        gifs: flag(params.get("gifs"), DEFAULT_SETTINGS.gifs),
+        giflinks: flag(params.get("giflinks"), DEFAULT_SETTINGS.giflinks),
     };
 }
 
@@ -180,6 +188,8 @@ export function settingsQuery(settings: OverlaySettings): string {
     add("newline", settings.newline, "nl");
     add("names", settings.names);
     add("homies", settings.homies);
+    add("gifs", settings.gifs);
+    add("giflinks", settings.giflinks);
     return pairs.length > 0 ? `?${pairs.join("&")}` : "";
 }
 

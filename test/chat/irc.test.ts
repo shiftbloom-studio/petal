@@ -3,6 +3,7 @@ import { it } from "node:test";
 
 import { FfzFlag } from "../../src/lib/chat/effects";
 import { EmoteSet } from "../../src/lib/chat/emote-set";
+import { isGifUrl, parseGifsTag } from "../../src/lib/chat/gifs";
 import { parseEmotesTag, parseIrcLine } from "../../src/lib/chat/irc/parse";
 import { type MessagePart, tokenize } from "../../src/lib/chat/tokenize";
 import type { Emote } from "../../src/lib/chat/types";
@@ -52,6 +53,7 @@ const show = (list: MessagePart[]) =>
         .map((part) => {
             if (part.type === "text") return part.text;
             if (part.type === "mention") return `<${part.text}>`;
+            if (part.type === "gif") return `[gif:${part.text}]`;
             const overlays = part.overlays.map((o) => `+${o.name}`).join("");
             return `[${part.emote.provider}:${part.emote.name}${overlays}]`;
         })
@@ -75,6 +77,45 @@ it("cuts messages into text, mentions and emotes", () => {
     ]) {
         assert.equal(show(parts(text, emotes)), expected, text);
     }
+});
+
+it("keeps Twitch GIF ranges and direct links separate, with unsafe URLs left as text", () => {
+    const url = "https://media4.giphy.com/media/joSNxeswxuc74Juo8X/giphy.gif?cid=twitch&ct=g";
+    const text = "👋 [GIF] Kappa";
+    const gifs = parseGifsTag(`2-6|joSNxeswxuc74Juo8X|${url}`);
+    const result = tokenize(text, parseEmotesTag("25:8-12"), () => undefined, gifs);
+    assert.equal(show(result), "👋 [gif:[GIF]] [twitch:Kappa]");
+    assert.deepEqual(result[1], { type: "gif", source: "twitch", url, text: "[GIF]" });
+    assert.deepEqual(parts(url), [{ type: "gif", source: "link", url, text: url }]);
+    const tenor = "https://media.tenor.com/example/hello.gif";
+    assert.equal(isGifUrl(tenor), true);
+    assert.equal(isGifUrl(tenor, true), false);
+    for (const unsafe of [
+        "http://media.giphy.com/media/a/giphy.gif",
+        "https://media.giphy.com.evil.example/media/a/giphy.gif",
+        "https://media.giphy.com@evil.example/a.gif",
+        "https://evil.example/a.gif",
+        "https://media.giphy.com:8080/a.gif",
+        "https://media.giphy.com/a.svg",
+        "https://giphy.com/gifs/hello-123",
+        "https://tenor.com/view/hello-123",
+        "data:image/gif;base64,AAAA",
+    ]) {
+        assert.equal(isGifUrl(unsafe), false, unsafe);
+        assert.deepEqual(parts(unsafe), [{ type: "text", text: unsafe }]);
+        assert.deepEqual(parseGifsTag(`2-6|id|${unsafe}`), []);
+    }
+    assert.deepEqual(parseGifsTag(`6-2|id|${url},NaN-6|id|${url}`), []);
+    assert.equal(
+        show(
+            tokenize(text, [], () => undefined, [
+                ...gifs,
+                { start: 4, end: 6, url },
+                { start: 8, end: 99, url },
+            ]),
+        ),
+        "👋 [gif:[GIF]] Kappa",
+    );
 });
 
 it("applies BTTV modifiers to the next emote and FFZ modifiers to the previous one", () => {

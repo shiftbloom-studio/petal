@@ -60,6 +60,8 @@ Everything behind a running overlay besides Petal itself:
 | Service            | Asked by the Worker; by the browser only in the fallback | Asked by the browser         | Used for                             |
 | ------------------ | --------------------------------------------- | --------------------------------------- | ------------------------------------ |
 | Twitch             | `irc-ws.chat.twitch.tv`                       | `static-cdn.jtvnw.net`                  | Chat, emote and badge images         |
+| GIPHY              |                                               | `media.giphy.com`, `media0.giphy.com`–`media4.giphy.com`, `i.giphy.com` | Native Twitch GIFs (`gifs=1`, default) and direct GIF links (`giflinks=1`, opt-in) |
+| Tenor              |                                               | `media.tenor.com`                       | Direct GIF links, only with `giflinks=1` |
 | IVR                | `api.ivr.fi`                                  |                                         | Twitch badge sets                    |
 | 7TV                | `7tv.io`                                      | `events.7tv.io`                         | Emotes, paints, badges, live updates |
 | BetterTTV          | `api.betterttv.net`                           | `cdn.betterttv.net`, `sockets.betterttv.net` | Emotes, badges, username effects |
@@ -81,8 +83,11 @@ every provider socket, and exposes reactive state to the Solid components:
   for provider data. `platform.ts` tells both whether there is a relay to ask.
 - `providers/` has one module per service: REST loaders, and the live sockets for 7TV (EventAPI),
   BTTV and FFZ (pubsub).
-- `tokenize.ts` turns a message into text, mention and emote parts, and `effects.ts` reduces emote
+- `tokenize.ts` turns a message into text, mention, GIF and emote parts, and `effects.ts` reduces emote
   modifiers to CSS.
+- `gifs.ts` validates native Twitch GIF ranges and direct media URLs. `overlay/gifs.ts` bounds
+  GIF downloads and checks their containers; `GifView.tsx` loads only visible GIFs and releases
+  their image elements, requests and blob URLs when hidden or removed.
 - `socket.ts` is the shared `ReconnectingSocket` behind every connection: jittered exponential
   backoff after a drop. The chat and 7TV connections are also replaced when they go quiet.
 - `demo.ts` is the sample chat behind `demo=1`.
@@ -151,15 +156,21 @@ a link without parameters shows the default look. Invalid values fall back to th
 | `nl`       | `0`      | The message starts on a new line below the name                         |
 | `names`    | `1`      | Show user names                                                         |
 | `homies`   | `0`      | Show Chatterino Homies badges                                           |
+| `gifs`     | `1`      | Show native Twitch GIFs from GIPHY                                      |
+| `giflinks` | `0`      | Show direct GIPHY and Tenor GIF links                                   |
 
 The filters run in the overlay. The relay passes on every line of the channel, whatever the link
 says.
 
-`homies` is the one option that reaches a third party. With `homies=1` and badges on,
+Some options load additional third-party images. With `homies=1` and badges on,
 `src/lib/chat/providers/homies.ts` loads three lists, from `chatterinohomies.com` and
 `itzalex.github.io`, whole and without credentials, and accepts badge images from
 `cdn.chatterinohomies.com` and `itzalex.github.io` only. The lists are not behind the gateway.
 Without the parameter no request goes to any of these hosts.
+
+Native Twitch GIFs load from GIPHY by default; `gifs=0` keeps their original text. `giflinks=1`
+also loads direct GIF image links from GIPHY and Tenor. Both use the same bounded, visible-only
+loader; see the GIF limits in [README.md](../README.md#how-it-works).
 
 Two more parameters are not part of the look. `demo=1` replaces the chat session by the sample chat,
 and `direct=1` switches the relay and the gateway off for that overlay.
@@ -623,6 +634,7 @@ log or to Analytics Engine, and they never appear in an error message or in `/ap
 | Rate limiter             | Counts of requests per client address and endpoint, over one minute, in the memory of Cloudflare's rate limiter |
 | `/api/status`            | Counts per hub, the pause of a hub and the version of the deployment   |
 | Browser, local storage   | The theme choice under `theme`, once the button in the header was used. Not on overlay pages |
+| Browser, GIFs            | Only visible GIFs: bounded downloads with `cache: no-store`, rendered through temporary blob URLs. Hidden, faded, moderated and removed GIFs abort downloads and release those URLs and image elements. No persistent GIF cache; the browser controls final memory reclamation |
 
 The channel in a URL is the login of the streamer whose chat is shown. It identifies the stream, not
 a viewer.

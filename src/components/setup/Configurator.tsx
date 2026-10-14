@@ -99,7 +99,7 @@ export default function Configurator(props: { setup: Setup }) {
                         <span class={styles.summaryNote}>
                             <Show
                                 when={moreChanged() > 0}
-                                fallback="Emotes, motion, badges, filters"
+                                fallback="Emotes, GIFs, motion, badges, filters"
                             >
                                 {moreChanged()} changed
                             </Show>
@@ -217,6 +217,18 @@ export default function Configurator(props: { setup: Setup }) {
                                 hint="Badges from the Homies community, loaded from its servers."
                                 checked={settings().homies}
                                 onChange={(value) => setup.set("homies", value)}
+                            />
+                            <Toggle
+                                label="Show Twitch GIFs"
+                                hint="GIFs sent with Twitch's GIF keyboard."
+                                checked={settings().gifs}
+                                onChange={(value) => setup.set("gifs", value)}
+                            />
+                            <Toggle
+                                label="Show GIF links"
+                                hint="Direct GIPHY and Tenor GIF image links in messages."
+                                checked={settings().giflinks}
+                                onChange={(value) => setup.set("giflinks", value)}
                             />
                             <Toggle
                                 label="Show bots"

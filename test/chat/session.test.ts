@@ -28,7 +28,7 @@ function openSession(t: TestContext) {
         chat()?.receive([JOIN_ECHO, ...replay].join("\r\n"));
     };
     const ids = () => session.state.messages.map((message) => message.id);
-    return { chat, join, ids };
+    return { chat, join, ids, session };
 }
 
 it("renders a line once, however often it arrives", (t) => {
@@ -51,4 +51,15 @@ it("removes what moderators removed and does not bring it back", (t) => {
     assert.deepEqual(ids(), ["m1", "m3"]);
     chat()?.receive("@target-user-id=1 :tmi.twitch.tv CLEARCHAT #forsen :u1");
     assert.deepEqual(ids(), []);
+});
+
+it("passes Twitch GIF tags through replay and preserves the complete media URL", (t) => {
+    const { chat, join, session } = openSession(t);
+    const url = "https://media1.giphy.com/media/p3hZ9PbhVBO9gM6LoE/giphy.gif?cid=twitch&ct=g";
+    join(line("[GIF]", "1", `;petal-replay=1;gifs=0-4|p3hZ9PbhVBO9gM6LoE|${url}`));
+    assert.deepEqual(session.parts(session.state.messages[0]), [
+        { type: "gif", source: "twitch", url, text: "[GIF]" },
+    ]);
+    chat()?.receive("@target-msg-id=[GIF] :tmi.twitch.tv CLEARMSG #forsen :[GIF]");
+    assert.equal(session.state.messages.length, 0);
 });

@@ -34,6 +34,8 @@ describe("overlayUrl", () => {
             { newline: true },
             { names: false },
             { homies: true },
+            { gifs: false },
+            { giflinks: true },
         ];
         // Each change on its own, then all of them in one link.
         const rows = changes.map((change): [Partial<OverlaySettings>, number] => [change, 1]);

@@ -122,6 +122,15 @@ export default function Privacy() {
             </p>
             <OverlayServices lang="en" />
             <p>
+                Native Twitch GIFs load directly from GIPHY unless the overlay link contains gifs=0.
+                Direct GIPHY and Tenor GIF links in messages load only with giflinks=1. GIFs are
+                requested only while visible, without cookies or a referrer, and with browser
+                caching disabled. The provider receives your IP address and browser details; native
+                GIF URLs retain the parameters supplied by Twitch. When a GIF leaves the visible
+                overlay, fades out or is removed, Petal cancels its download and releases its image
+                and temporary blob URL. GIF files are not stored by the relay or gateway.
+            </p>
+            <p>
                 Badges of Chatterino Homies are switched off unless the address of the overlay
                 contains homies=1. Only then does your browser load the lists of these badges from
                 chatterinohomies.com and itzalex.github.io and their images from

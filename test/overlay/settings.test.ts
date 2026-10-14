@@ -33,6 +33,8 @@ describe("parseSettings", () => {
                 },
             ],
             ["size=3&size=2", { size: 3 }],
+            ["gifs=0&giflinks=true", { gifs: false, giflinks: true }],
+            ["gifs=yes&giflinks=2", {}],
             ["ignore=b_bot&ignore=@A_Bot,,bad-name", { ignore: ["a_bot", "b_bot"] }],
             ["custom=Comic+Sans+MS", { custom: "Comic Sans MS" }],
             ["size=4&emotes=1.5&stroke=-1&shadow=9&font=comic&fade=601", {}],
