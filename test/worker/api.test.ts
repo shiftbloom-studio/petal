@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { handleApi, health } from "../../src/worker/api";
+import { HUB_TIMEOUT_MS, handleApi, health } from "../../src/worker/api";
 import type { Env } from "../../src/worker/env";
 import { shardOf } from "../../src/worker/relay/shard";
 
@@ -102,10 +102,16 @@ describe("handleApi", () => {
         const logged = t.mock.method(console, "error", () => {});
         const response = call(fakeEnv({}, () => new Promise<Response>(() => {})).env, CHANNEL);
         await new Promise((resolve) => setImmediate(resolve));
-        t.mock.timers.tick(5000);
+        t.mock.timers.tick(HUB_TIMEOUT_MS);
         assert.deepEqual(await refusal(response), [503, "relay_unavailable"]);
-        const lines = logged.mock.calls.map((call) => String(call.arguments[0]));
-        assert.match(lines.join("\n"), /^hub_unavailable shard=\d+ error=Error: timed out$/m);
+        const line = JSON.parse(String(logged.mock.calls[0]?.arguments[0])) as {
+            message: string;
+            shard: number;
+            cause: string;
+        };
+        assert.equal(line.message, "hub_unavailable");
+        assert.equal(typeof line.shard, "number");
+        assert.equal(line.cause, "Error: timed out");
     });
 
     it("does not log the channel when a hub failure names the request", async (t) => {
@@ -118,8 +124,10 @@ describe("handleApi", () => {
             503,
             "relay_unavailable",
         ]);
-        const text = logged.mock.calls.map((call) => String(call.arguments[0])).join("\n");
-        assert.match(text, /hub_unavailable shard=\d+ error=Error: fetch failed$/m);
+        const text = String(logged.mock.calls[0]?.arguments[0]);
+        const line = JSON.parse(text) as { message: string; cause: string };
+        assert.equal(line.message, "hub_unavailable");
+        assert.equal(line.cause, "Error: fetch failed");
         assert.equal(text.includes("somechannel"), false);
         assert.equal(text.includes("?"), false);
     });
@@ -162,7 +170,7 @@ describe("handleApi", () => {
             const response = call(fakeEnv({}, answer).env, CHANNEL);
             // The hub is asked after the rate limit was, which takes a turn of the event loop.
             await new Promise((resolve) => setImmediate(resolve));
-            t.mock.timers.tick(5000);
+            t.mock.timers.tick(HUB_TIMEOUT_MS);
             assert.deepEqual(await refusal(response), [503, "relay_unavailable"]);
         }
         const full = Response.json({ error: "hub_full" }, { status: 503 });

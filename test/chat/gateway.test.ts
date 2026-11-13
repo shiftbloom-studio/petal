@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it, type TestContext } from "node:test";
 
-import { fetchJson } from "../../src/lib/chat/gateway";
+import { fetchJson, PROVIDER_FETCH_TIMEOUT_MS } from "../../src/lib/chat/gateway";
 import { type FetchAnswer, stubFetch, useLocation } from "../helpers";
 
 const PROVIDER = "https://api.betterttv.net/3/cached/users/twitch/1";
@@ -53,7 +53,19 @@ it("gives up on the provider itself after 8 seconds", async (t) => {
     const fetches = stubFetch({ [PROVIDER]: hangs });
     t.after(fetches);
     const result = fetchJson(PROVIDER);
-    t.mock.timers.tick(8000);
+    t.mock.timers.tick(PROVIDER_FETCH_TIMEOUT_MS);
+    await assert.rejects(result);
+});
+
+it("gives up while a provider body is still open", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    t.mock.method(console, "warn", () => {});
+    t.after(useLocation("https://chat.shiftbloom.studio/chat/forsen?direct=1"));
+    const open: FetchAnswer = () => new Response(new ReadableStream());
+    const fetches = stubFetch({ [PROVIDER]: open });
+    t.after(fetches);
+    const result = fetchJson(PROVIDER);
+    t.mock.timers.tick(PROVIDER_FETCH_TIMEOUT_MS);
     await assert.rejects(result);
 });
 
@@ -66,7 +78,7 @@ it("asks the provider when the gateway has not answered after 8 seconds", async 
         });
     const urls = stub(t, hangs);
     const result = fetchJson(PROVIDER);
-    t.mock.timers.tick(7999);
+    t.mock.timers.tick(PROVIDER_FETCH_TIMEOUT_MS - 1);
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(urls(), [GATEWAY]);
     t.mock.timers.tick(1);

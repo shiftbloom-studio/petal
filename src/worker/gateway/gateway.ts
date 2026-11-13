@@ -1,4 +1,4 @@
-import { logWorkerEvent, WorkerLogEvent } from "../log";
+import { logWarning } from "../log";
 import { buildPaintsQuery, PAINTS_PER_QUERY, parsePaintsRequest } from "./paints";
 import {
     type CachePolicy,
@@ -124,9 +124,21 @@ const MEMORY_BUDGET = 16 * 1024 * 1024;
 /** Larger answers are read from KV every time rather than held in every isolate. */
 const MEMORY_ENTRY_MAX = 1024 * 1024;
 const PAINTS_BODY_MAX = 32 * 1024;
-/** A defect fails every request alike, so one log line a minute says as much as all of them. */
-const FAILURE_LOG_INTERVAL_MS = 60_000;
-const UPSTREAM_LOG_INTERVAL_MS = 60_000;
+const LOG_INTERVAL_MS = 60_000;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+const UpstreamReason = {
+    Timeout: "timeout",
+    Network: "network",
+    Status: "status",
+    Response: "response",
+    Abandoned: "abandoned",
+    Unknown: "unknown",
+} as const;
+
+type UpstreamReason = (typeof UpstreamReason)[keyof typeof UpstreamReason];
+
+const TIMEOUT_ERROR_NAMES = new Set(["TimeoutError", "AbortError"]);
 
 /** Most telling first: what a response made of several paints reports. */
 const OUTCOME_RANK: readonly CacheStatus[] = ["STALE", "MISS", "EXPIRED", "UPDATING", "HIT"];
@@ -149,37 +161,54 @@ export class GatewayError extends Error {
 /** Both rate limits of the Worker count over a minute, after which a client may try again. */
 export const rateLimited = () => new GatewayError(429, "rate_limited", 60);
 
-const UpstreamReason = {
-    timeout: "timeout",
-    network: "network",
-    status: "status",
-    response: "response",
-    abandoned: "abandoned",
-    unknown: "unknown",
-} as const;
-
-type UpstreamReason = (typeof UpstreamReason)[keyof typeof UpstreamReason];
-
-const FETCH_ABORT_NAMES = new Set<string>(["TimeoutError", "AbortError"]);
+interface UpstreamFailureOptions {
+    status?: number;
+    retryAfterMs?: number;
+}
 
 class UpstreamFailure extends Error {
     readonly reason: UpstreamReason;
     readonly status?: number;
     readonly rateLimited: boolean;
-    /** Milliseconds the provider asked us to stay away, if it said so. */
     readonly retryAfterMs?: number;
 
-    constructor(reason: UpstreamReason, options?: { status?: number; retryAfterMs?: number }) {
+    constructor(reason: UpstreamReason, options: UpstreamFailureOptions = {}) {
         super(reason);
         this.reason = reason;
-        this.status = options?.status;
-        this.rateLimited = options?.status === 429;
-        this.retryAfterMs = options?.retryAfterMs;
+        this.status = options.status;
+        this.rateLimited = options.status === HTTP_TOO_MANY_REQUESTS;
+        this.retryAfterMs = options.retryAfterMs;
     }
 }
 
 function timedOut(error: unknown): boolean {
-    return error instanceof Error && FETCH_ABORT_NAMES.has(error.name);
+    return error instanceof Error && TIMEOUT_ERROR_NAMES.has(error.name);
+}
+
+const JSON_CONTENT_TYPE = /^application\/(?:[\w.-]+\+)?json\b/i;
+
+function isJsonResponse(response: Response): boolean {
+    const type = response.headers.get("content-type") ?? "";
+    return response.status === 200 && JSON_CONTENT_TYPE.test(type);
+}
+
+function parseJson(text: string): unknown {
+    try {
+        return JSON.parse(text) as unknown;
+    } catch {
+        return undefined;
+    }
+}
+
+function parseJsonObject(text: string): unknown {
+    const json = parseJson(text);
+    if (typeof json === "object" && json !== null) return json;
+    throw new UpstreamFailure(UpstreamReason.Response);
+}
+
+interface UpstreamLogState {
+    loggedAt: number;
+    suppressed: number;
 }
 
 const freshFor = (entry: Entry, policy: CachePolicy) =>
@@ -268,9 +297,7 @@ export class DataGateway {
     /** Keyed by provider for rate limits, which hit every route, and by cache key otherwise. */
     readonly #backoff = new Map<string, { until: number; delay: number }>();
     #failureLoggedAt = Number.NEGATIVE_INFINITY;
-    /** Per provider, so one outage is one line however many routes it takes down. */
-    readonly #upstreamLoggedAt = new Map<string, number>();
-    readonly #upstreamSuppressed = new Map<string, number>();
+    readonly #upstreamLogs = new Map<string, UpstreamLogState>();
 
     constructor(options: GatewayOptions) {
         this.#userAgent = options.userAgent;
@@ -323,7 +350,7 @@ export class DataGateway {
 
     /** Anything thrown that is not a refusal is a fault of the gateway's own code. */
     #defect(route: string, error: unknown): GatewayError {
-        if (this.#now() - this.#failureLoggedAt >= FAILURE_LOG_INTERVAL_MS) {
+        if (this.#now() - this.#failureLoggedAt >= LOG_INTERVAL_MS) {
             this.#failureLoggedAt = this.#now();
             // The route id only: the path would name a channel.
             console.error("data gateway failed", route, error);
@@ -372,77 +399,100 @@ export class DataGateway {
             this.#refresh(key, route, context, () => load(timeoutMs));
         const blocked = this.#blockedFor(key, route);
 
-        if (!entry) {
-            if (blocked > 0) {
-                throw new GatewayError(503, "upstream_backoff", Math.ceil(blocked / 1000));
-            }
-            if (!this.#running(key) && context.admit && !(await context.admit())) {
-                throw rateLimited();
-            }
-            try {
-                const loaded = await this.#follow(refresh(TIMEOUT_EMPTY_MS));
-                return { entry: loaded, cache: "MISS", layer: "upstream" };
-            } catch (error) {
-                throw this.#unavailable(key, route, error);
-            }
-        }
+        if (!entry) return this.#loadMiss(key, route, context, refresh, blocked);
 
         const age = this.#age(entry);
         const fresh = freshFor(entry, policy);
         if (age < fresh) return { entry, cache: "HIT", layer };
         if (blocked > 0) return { entry, cache: "STALE", layer };
-        const usable = age < fresh + staleIfErrorFor(entry, policy);
-        if (usable && age < fresh + revalidateFor(entry, policy)) {
-            // Failures are recorded by the refresh itself; the next request after the
-            // backoff tries again.
-            context.waitUntil(refresh(TIMEOUT_EMPTY_MS).catch(() => {}));
+        if (this.#refreshBehind(entry, policy, age, fresh)) {
+            context.waitUntil(refresh(TIMEOUT_EMPTY_MS).catch(() => undefined));
             return { entry, cache: "UPDATING", layer };
         }
+        return this.#refreshOrKeep(entry, layer, route, refresh, age, fresh);
+    }
+
+    async #loadMiss(
+        key: string,
+        route: GatewayRoute,
+        context: RequestContext,
+        refresh: (timeoutMs: number) => Promise<Entry>,
+        blockedMs: number,
+    ): Promise<Resolved> {
+        if (blockedMs > 0) {
+            throw new GatewayError(503, "upstream_backoff", Math.ceil(blockedMs / 1000));
+        }
+        const startsFetch = !this.#running(key);
+        if (startsFetch && context.admit && !(await context.admit())) throw rateLimited();
         try {
-            const renewed = await this.#follow(
-                refresh(usable ? TIMEOUT_STALE_MS : TIMEOUT_EMPTY_MS),
-            );
+            const loaded = await this.#follow(refresh(TIMEOUT_EMPTY_MS));
+            return { entry: loaded, cache: "MISS", layer: "upstream" };
+        } catch (error) {
+            throw this.#unavailable(key, route, error);
+        }
+    }
+
+    #refreshBehind(entry: Entry, policy: CachePolicy, age: number, fresh: number): boolean {
+        const withinStaleWindow = age < fresh + staleIfErrorFor(entry, policy);
+        const withinRevalidateWindow = age < fresh + revalidateFor(entry, policy);
+        return withinStaleWindow && withinRevalidateWindow;
+    }
+
+    async #refreshOrKeep(
+        entry: Entry,
+        layer: CacheLayer,
+        route: GatewayRoute,
+        refresh: (timeoutMs: number) => Promise<Entry>,
+        age: number,
+        fresh: number,
+    ): Promise<Resolved> {
+        const withinStaleWindow = age < fresh + staleIfErrorFor(entry, route.policy);
+        const timeoutMs = withinStaleWindow ? TIMEOUT_STALE_MS : TIMEOUT_EMPTY_MS;
+        try {
+            const renewed = await this.#follow(refresh(timeoutMs));
             return { entry: renewed, cache: "EXPIRED", layer: "upstream" };
         } catch (error) {
-            this.#noteAbandoned(route, error);
+            this.#logIfAbandoned(route, error);
             return { entry, cache: "STALE", layer };
         }
     }
 
     #unavailable(key: string, route: GatewayRoute, error: unknown): GatewayError {
         if (error instanceof GatewayError) return error;
-        this.#noteAbandoned(route, error);
+        this.#logIfAbandoned(route, error);
         const blocked = Math.ceil(this.#blockedFor(key, route) / 1000);
         return new GatewayError(502, "upstream_unavailable", blocked > 0 ? blocked : undefined);
     }
 
-    #noteAbandoned(route: GatewayRoute, error: unknown): void {
-        if (error instanceof UpstreamFailure && error.reason === "abandoned") {
+    #logIfAbandoned(route: GatewayRoute, error: unknown): void {
+        if (error instanceof UpstreamFailure && error.reason === UpstreamReason.Abandoned) {
             this.#logUpstream(route, error);
         }
     }
 
-    #logUpstream(route: GatewayRoute, error: unknown): void {
-        const provider = route.provider;
+    #claimUpstreamLog(provider: string): { suppressed: number } | undefined {
         const now = this.#now();
-        const previous = this.#upstreamLoggedAt.get(provider) ?? Number.NEGATIVE_INFINITY;
-        if (now - previous < UPSTREAM_LOG_INTERVAL_MS) {
-            const skipped = this.#upstreamSuppressed.get(provider) ?? 0;
-            this.#upstreamSuppressed.set(provider, skipped + 1);
-            return;
+        const state = this.#upstreamLogs.get(provider);
+        if (state && now - state.loggedAt < LOG_INTERVAL_MS) {
+            state.suppressed += 1;
+            return undefined;
         }
-        const suppressed = this.#upstreamSuppressed.get(provider) ?? 0;
-        this.#upstreamSuppressed.set(provider, 0);
-        this.#upstreamLoggedAt.set(provider, now);
+        const suppressed = state?.suppressed ?? 0;
+        this.#upstreamLogs.set(provider, { loggedAt: now, suppressed: 0 });
+        return { suppressed };
+    }
+
+    #logUpstream(route: GatewayRoute, error: unknown): void {
+        const claimed = this.#claimUpstreamLog(route.provider);
+        if (!claimed) return;
         const failure = error instanceof UpstreamFailure ? error : undefined;
-        const fields: Record<string, string | number> = {
-            provider,
+        logWarning("upstream_unavailable", {
+            provider: route.provider,
             route: route.id,
-            reason: failure?.reason ?? UpstreamReason.unknown,
-        };
-        if (failure?.status !== undefined) fields.status = failure.status;
-        if (suppressed > 0) fields.suppressed = suppressed;
-        logWorkerEvent("warn", WorkerLogEvent.upstreamUnavailable, fields);
+            reason: failure?.reason ?? UpstreamReason.Unknown,
+            status: failure?.status,
+            suppressed: claimed.suppressed > 0 ? claimed.suppressed : undefined,
+        });
     }
 
     /**
@@ -454,7 +504,7 @@ export class DataGateway {
         const limit = after(FOLLOW_MS);
         try {
             const result = await Promise.race([refresh, limit.elapsed]);
-            if (!result) throw new UpstreamFailure(UpstreamReason.abandoned);
+            if (!result) throw new UpstreamFailure(UpstreamReason.Abandoned);
             return result;
         } finally {
             limit.cancel();
@@ -564,40 +614,34 @@ export class DataGateway {
             });
         } catch (error) {
             throw new UpstreamFailure(
-                timedOut(error) ? UpstreamReason.timeout : UpstreamReason.network,
+                timedOut(error) ? UpstreamReason.Timeout : UpstreamReason.Network,
             );
         }
         if (response.status === 200 || response.status === 404) return response;
         await response.body?.cancel();
-        throw new UpstreamFailure(UpstreamReason.status, {
+        throw new UpstreamFailure(UpstreamReason.Status, {
             status: response.status,
             retryAfterMs: parseRetryAfter(response.headers.get("retry-after"), this.#now()),
         });
     }
 
     async #json(response: Response, maxBytes: number): Promise<unknown> {
-        const type = response.headers.get("content-type") ?? "";
-        if (response.status !== 200 || !/^application\/(?:[\w.-]+\+)?json\b/i.test(type)) {
+        const text = await this.#jsonText(response, maxBytes);
+        return parseJsonObject(text);
+    }
+
+    async #jsonText(response: Response, maxBytes: number): Promise<string> {
+        if (!isJsonResponse(response)) {
             await response.body?.cancel();
-            throw new UpstreamFailure(UpstreamReason.response);
+            throw new UpstreamFailure(UpstreamReason.Response);
         }
-        let text: string | undefined;
         try {
-            text = await readCapped(response, maxBytes);
-        } catch {
-            throw new UpstreamFailure(UpstreamReason.response);
+            const text = await readCapped(response, maxBytes);
+            if (text !== undefined) return text;
+        } catch (error) {
+            if (error instanceof UpstreamFailure) throw error;
         }
-        if (text === undefined) throw new UpstreamFailure(UpstreamReason.response);
-        let json: unknown;
-        try {
-            json = JSON.parse(text);
-        } catch {
-            throw new UpstreamFailure(UpstreamReason.response);
-        }
-        if (typeof json !== "object" || json === null) {
-            throw new UpstreamFailure(UpstreamReason.response);
-        }
-        return json;
+        throw new UpstreamFailure(UpstreamReason.Response);
     }
 
     #age(entry: Entry): number {
@@ -705,7 +749,7 @@ export class DataGateway {
             collecting.ids.push(id);
             collecting.timeoutMs = Math.max(collecting.timeoutMs, timeoutMs);
             const loaded = (await leaving).get(id);
-            if (!loaded) throw new UpstreamFailure(UpstreamReason.response);
+            if (!loaded) throw new UpstreamFailure(UpstreamReason.Response);
             return loaded;
         };
         const settled = await Promise.allSettled(
@@ -758,7 +802,7 @@ export class DataGateway {
                 };
                 // GraphQL reports failures with status 200, and one bad field voids them all.
                 const paints = json.data?.paints;
-                if (json.errors || !paints) throw new UpstreamFailure(UpstreamReason.response);
+                if (json.errors || !paints) throw new UpstreamFailure(UpstreamReason.Response);
                 for (const [index, id] of chunk.entries()) {
                     const paint = paints[`p${index}`];
                     loaded.set(

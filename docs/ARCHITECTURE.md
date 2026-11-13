@@ -535,8 +535,8 @@ not a proxy for arbitrary URLs.
 The three windows follow each other. While an answer is fresh it is served without asking the
 provider. In the window after that, lists that every overlay shares are served at once and refreshed
 in the background. Channel data has no such window: a reload of the overlay must show an emote that
-was added a minute ago. In the last window the stored answer is only served when the provider fails. A copy that is
-still held after that window is served the same way when the provider fails, instead of a 502.
+was added a minute ago. In the last window the stored answer is only served when the provider fails.
+A copy still held after that window is served the same way when the provider fails, instead of a 502.
 
 A 404 of a provider means that the channel has no account there. It is stored for the time in the
 table, and served for up to an hour when the provider fails. Lists that always exist have no such
@@ -636,7 +636,7 @@ log or to Analytics Engine, and they never appear in an error message or in `/ap
 | Overlay connection attachment | Channel, anonymous nick, phase of the handshake, time of acceptance |
 | KV                       | Answers of the providers: lists of emotes, badges and paints, under keys made of the route id and the id of a channel, an emote set or a paint |
 | Analytics Engine         | Counters: the event (`irc-connect`, `irc-refused`, `data`, `hub-tick`, `hub-paused`, `hub-resumed`), the reason of a refusal or a pause, the route id, cache status and layer, the status code, the shard number, per alarm of a hub, how many overlays, channels, connections to Twitch, relayed lines, accepted and refused connections and failed connections to Twitch it counted and, per pause, the count that exceeded a threshold and the threshold. No channel, no address, no name, no text |
-| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. Alarm invocations are logged by the platform as the scheduled time (`Date.toString()`); the hub's `alarm()` does not log. The code adds error messages, which name a path, a route id or a shard number and never the query; one line `upstream_unavailable` per provider per minute with the provider, the route id and a reason (`timeout`, `network`, `status`, `response`, `abandoned`) and never a channel; and one line when a hub pauses itself, with the reason, the shard, a count and its threshold |
+| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. Alarm invocations are logged by the platform as the scheduled time (`Date.toString()`); the hub's `alarm()` does not log. The code adds error messages, which name a path, a route id or a shard number and never the query; one JSON line `upstream_unavailable` per provider per minute with the provider, the route id and a reason (`timeout`, `network`, `status`, `response`, `abandoned`, `unknown`) and never a channel; and one line when a hub pauses itself, with the reason, the shard, a count and its threshold |
 | Rate limiter             | Counts of requests per client address and endpoint, over one minute, in the memory of Cloudflare's rate limiter |
 | `/api/status`            | Counts per hub, the pause of a hub and the version of the deployment   |
 | Browser, local storage   | The theme choice under `theme`, once the button in the header was used. Not on overlay pages |
