@@ -84,6 +84,20 @@ function relayUnavailable(env: Env, shard: number): Response {
     return refuse("relay_unavailable", 503);
 }
 
+/**
+ * A short reason for the log. Drops a URL or a query: both can name a channel. The name of the
+ * error remains, so a failure with nothing else to say is still distinct.
+ */
+function hubFailure(error: unknown): string {
+    const name = error instanceof Error ? error.name : "Error";
+    const message = error instanceof Error ? error.message : "";
+    const detail = message
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/\?[^ \n]*/g, "")
+        .trim();
+    return detail ? `${name}: ${detail}` : name;
+}
+
 /** Rejects when `work` takes longer, so a hub that hangs cannot hold a request open. */
 function within<T>(milliseconds: number, work: Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
@@ -163,7 +177,10 @@ async function chat(request: Request, env: Env, url: URL): Promise<Response> {
     try {
         response = await within(HUB_TIMEOUT_MS, hub(env, shard).fetch(request));
     } catch (error) {
-        console.error("hub did not take the connection", shard, error);
+        // The reason has to be part of the message. A second argument is dropped from the
+        // Workers log line, which otherwise only shows the shard and this file's callsite.
+        // A URL in the message would name the channel, so one is not kept.
+        console.error(`hub_unavailable shard=${shard} ${hubFailure(error)}`);
         return relayUnavailable(env, shard);
     }
     if (response.status === 101) {
@@ -221,6 +238,19 @@ async function status(request: Request, env: Env): Promise<Response> {
         shards,
     };
     return json(body);
+}
+
+/**
+ * Cheap liveness for an external check. No KV, no hub, no provider: a third-party outage must
+ * not fail it. `version` is the id of the running deployment, or null where the binding is absent.
+ */
+export function health(request: Request, env: Pick<Env, "CF_VERSION_METADATA">): Response {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+        return refuse("method_not_allowed", 405, { allow: "GET, HEAD" });
+    }
+    const headers = { ...JSON_HEADERS };
+    if (request.method === "HEAD") return new Response(null, { status: 200, headers });
+    return json({ ok: true, version: env.CF_VERSION_METADATA?.id ?? null }, 200, headers);
 }
 
 /**

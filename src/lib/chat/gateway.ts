@@ -14,7 +14,11 @@ export const GATEWAY_PREFIXES: Readonly<Record<string, string>> = {
     "https://api.ivr.fi/": "/api/data/ivr/",
 };
 
-/** The gateway itself gives a provider six seconds; longer than that and it is stuck. */
+/**
+ * The gateway itself gives a provider six seconds and answers before this. The direct attempt
+ * gets the same limit: a provider that hangs must fail the load, so it can be tried again later
+ * instead of holding it open for the rest of the stream.
+ */
 const GATEWAY_TIMEOUT_MS = 8000;
 
 /** On every answer of the gateway, and on nothing else that may answer under its path. */
@@ -39,22 +43,23 @@ async function readJson<T>(response: Response, url: string): Promise<T | undefin
     return (await response.json()) as T;
 }
 
-async function fetchFromGateway<T>(url: string, request?: JsonRequest): Promise<T | undefined> {
+/** Gives up after {@link GATEWAY_TIMEOUT_MS}, including while the body is still downloading. */
+function fetchWithinDeadline(url: string, request?: JsonRequest): Promise<Response> {
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), GATEWAY_TIMEOUT_MS);
-    try {
-        const response = await fetch(url, { ...request, signal: deadline.signal });
-        // A 404 from the gateway is the provider's answer. A 404 from whatever else serves
-        // this origin, such as a deployment without the gateway, says nothing about the data.
-        const answer = response.ok || response.status === 404;
-        if (answer && !response.headers.has(GATEWAY_HEADER)) {
-            throw new Error(`${url} is not the gateway`);
-        }
-        // Awaited here, so the deadline covers the body as well.
-        return await readJson<T>(response, url);
-    } finally {
-        clearTimeout(timer);
+    return fetch(url, { ...request, signal: deadline.signal }).finally(() => clearTimeout(timer));
+}
+
+async function fetchFromGateway<T>(url: string, request?: JsonRequest): Promise<T | undefined> {
+    const response = await fetchWithinDeadline(url, request);
+    // A 404 from the gateway is the provider's answer. A 404 from whatever else serves
+    // this origin, such as a deployment without the gateway, says nothing about the data.
+    const answer = response.ok || response.status === 404;
+    if (answer && !response.headers.has(GATEWAY_HEADER)) {
+        throw new Error(`${url} is not the gateway`);
     }
+    // Awaited here, so the deadline covers the body as well.
+    return readJson<T>(response, url);
 }
 
 /**
@@ -71,5 +76,5 @@ export async function fetchJson<T>(url: string, request?: JsonRequest): Promise<
             console.warn("[gateway] no answer, asking the provider directly", error);
         }
     }
-    return readJson<T>(await fetch(url, request), url);
+    return readJson<T>(await fetchWithinDeadline(url, request), url);
 }

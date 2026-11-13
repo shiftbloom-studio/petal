@@ -7,8 +7,12 @@ import * as paints from "../../../src/worker/gateway/paints";
 
 const BTTV_GLOBAL = "https://api.betterttv.net/3/cached/emotes/global";
 const BTTV_USER = "https://api.betterttv.net/3/cached/users/twitch/50985620";
+const FFZ_ROOM_URL = "https://api.frankerfacez.com/v1/room/id/50985620";
+const FFZ_GLOBAL_URL = "https://api.frankerfacez.com/v1/set/global";
 const GLOBAL = "/bttv/3/cached/emotes/global";
 const USER = "/bttv/3/cached/users/twitch/50985620";
+const FFZ_ROOM = "/ffz/v1/room/id/50985620";
+const FFZ_GLOBAL = "/ffz/v1/set/global";
 const START = Date.UTC(2026, 8, 29, 12);
 
 const paintId = (n: number) => `01FQB6K5T0000BDD0YMN2${String(n).padStart(5, "0")}`;
@@ -144,6 +148,85 @@ describe("provider failures", () => {
             assert.equal(empty.stored.size, 0);
         });
     }
+
+    it("stores a provider 404 and does not treat it as a failure", async (t) => {
+        const warned = t.mock.method(console, "warn", () => {});
+        const { answers, calls, get, settle } = setup();
+        answers.set(FFZ_ROOM_URL, () => new Response("missing", { status: 404 }));
+        const first = await get(FFZ_ROOM);
+        assert.equal(first.status, 404);
+        assert.equal(cacheOf(first), "MISS; layer=upstream");
+        assert.equal(await first.text(), "null");
+        await settle();
+        const second = await get(FFZ_ROOM);
+        assert.equal(second.status, 404);
+        assert.equal(cacheOf(second), "HIT; layer=memory");
+        assert.equal(calls.length, 1);
+        assert.equal(warned.mock.calls.length, 0);
+    });
+
+    it("does not store a 404 of a list that always exists", async (t) => {
+        const warned = t.mock.method(console, "warn", () => {});
+        const { answers, calls, get, settle, stored } = setup();
+        answers.set(FFZ_GLOBAL_URL, () => new Response("nope", { status: 404 }));
+        const failed = await get(FFZ_GLOBAL);
+        assert.equal(failed.status, 502);
+        assert.equal(cacheOf(failed), "ERROR");
+        await settle();
+        assert.equal(stored.size, 0);
+        assert.equal(calls.length, 1);
+        const [message, detail] = warned.mock.calls[0].arguments as [
+            string,
+            { provider: string; route: string; reason: string },
+        ];
+        assert.equal(message, "upstream_unavailable");
+        assert.deepEqual(detail, { provider: "ffz", route: "ffz.global", reason: "response" });
+    });
+
+    it("serves a copy that has outlived its window when the provider fails", async () => {
+        const { advance, answers, calls, json, settle, get } = setup();
+        json(FFZ_ROOM_URL, { room: {}, sets: {} });
+        await get(FFZ_ROOM);
+        await settle();
+        advance(8 * 86400);
+        answers.set(FFZ_ROOM_URL, () => new Response(null, { status: 502 }));
+        const stale = await get(FFZ_ROOM);
+        assert.equal(stale.status, 200);
+        assert.equal(cacheOf(stale), "STALE; layer=memory");
+        assert.equal(calls.length, 2);
+        // The failure leaves the provider alone, so the retry neither fetches nor spends a miss.
+        const again = await get(FFZ_ROOM);
+        assert.equal(again.status, 200);
+        assert.equal(cacheOf(again), "STALE; layer=memory");
+        assert.equal(calls.length, 2);
+    });
+
+    it("does not spend a miss on a retry while the provider is left alone", async () => {
+        const { answers, calls, get, misses } = setup();
+        answers.set(FFZ_ROOM_URL, () => new Response(null, { status: 503 }));
+        misses.allowed = 1;
+        assert.equal((await get(FFZ_ROOM)).status, 502);
+        assert.equal(misses.allowed, 0);
+        assert.equal((await get(FFZ_ROOM)).status, 503);
+        assert.equal(misses.allowed, 0);
+        assert.equal(calls.length, 1);
+    });
+
+    it("logs an upstream timeout with the provider and without the channel", async (t) => {
+        const warned = t.mock.method(console, "warn", () => {});
+        const { answers, get } = setup();
+        answers.set(FFZ_ROOM_URL, () =>
+            Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" })),
+        );
+        assert.equal((await get(FFZ_ROOM)).status, 502);
+        const [message, detail] = warned.mock.calls[0].arguments as [
+            string,
+            { provider: string; route: string; reason: string },
+        ];
+        assert.equal(message, "upstream_unavailable");
+        assert.deepEqual(detail, { provider: "ffz", route: "ffz.room", reason: "timeout" });
+        assert.equal(JSON.stringify(warned.mock.calls).includes("50985620"), false);
+    });
 
     it("gives up on a provider that never answers", async (t) => {
         t.mock.timers.enable({ apis: ["setTimeout"] });

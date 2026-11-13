@@ -250,6 +250,9 @@ prerendered pages, the fonts, the images, `robots.txt` and the files for languag
 other request goes to `src/worker/entry.ts`, the entry of the Worker. It exports the Durable Object
 class and looks at the path:
 
+- `/health` is answered by `src/worker/api.ts` before anything else. It reads the version
+  binding and returns. It does not touch KV, a hub or a provider, so a third-party outage cannot
+  fail it.
 - A path that starts with `/api/` is answered by `src/worker/api.ts` and never reaches Nitro. The
   prefix is exact and case-sensitive.
 - Everything else is passed to the Worker that Nitro builds, unchanged. There, the middleware
@@ -264,6 +267,7 @@ the route rules, and the response of a WebSocket upgrade does not survive that.
 
 | Endpoint                         | Method    | Answer                                               |
 | -------------------------------- | --------- | ---------------------------------------------------- |
+| `/health`                        | GET, HEAD | `{ ok: true, version }` — the running deployment id, or null |
 | `/api/irc?channel=<login>`       | GET with a WebSocket upgrade | The chat of one channel, in the form of Twitch IRC |
 | `/api/data/<prefix>/<path>`      | GET; POST for 7TV paints | Provider data as JSON, with the header `x-petal-cache` |
 | `/api/status`                    | GET       | Counts as JSON                                       |
@@ -531,7 +535,8 @@ not a proxy for arbitrary URLs.
 The three windows follow each other. While an answer is fresh it is served without asking the
 provider. In the window after that, lists that every overlay shares are served at once and refreshed
 in the background. Channel data has no such window: a reload of the overlay must show an emote that
-was added a minute ago. In the last window the stored answer is only served when the provider fails.
+was added a minute ago. In the last window the stored answer is only served when the provider fails. A copy that is
+still held after that window is served the same way when the provider fails, instead of a 502.
 
 A 404 of a provider means that the channel has no account there. It is stored for the time in the
 table, and served for up to an hour when the provider fails. Lists that always exist have no such
@@ -606,8 +611,9 @@ twice. A replayed line is shown like any other.
 
 **Provider data.** Every REST request goes to the gateway first. After a network error, a timeout of
 8 seconds, an answer without the header `x-petal-cache`, or a status that is neither a success nor
-404, such as 429 or 503, the same request is sent to the provider directly. A 404 of the gateway is
-the provider's answer and is not retried.
+404, such as 429 or 503, the same request is sent to the provider directly, with the same 8 second
+limit. A 404 of the gateway is the provider's answer and is not retried. A provider 404 is cached
+by the gateway and is not an error: it means the channel has no account there.
 
 **Forced direct mode.** `?direct=1` on the overlay URL switches the relay and the gateway off for
 that overlay. The same holds for a page that was not loaded over http(s), such as a local file.
@@ -630,7 +636,7 @@ log or to Analytics Engine, and they never appear in an error message or in `/ap
 | Overlay connection attachment | Channel, anonymous nick, phase of the handshake, time of acceptance |
 | KV                       | Answers of the providers: lists of emotes, badges and paints, under keys made of the route id and the id of a channel, an emote set or a paint |
 | Analytics Engine         | Counters: the event (`irc-connect`, `irc-refused`, `data`, `hub-tick`, `hub-paused`, `hub-resumed`), the reason of a refusal or a pause, the route id, cache status and layer, the status code, the shard number, per alarm of a hub, how many overlays, channels, connections to Twitch, relayed lines, accepted and refused connections and failed connections to Twitch it counted and, per pause, the count that exceeded a threshold and the threshold. No channel, no address, no name, no text |
-| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. The code adds error messages, which name a path, a route id or a shard number and never the query, and one line when a hub pauses itself, with the reason, the shard, a count and its threshold |
+| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. Alarm invocations are logged by the platform as the scheduled time (`Date.toString()`); the hub's `alarm()` does not log. The code adds error messages, which name a path, a route id or a shard number and never the query; one line `upstream_unavailable` per provider per minute with the provider, the route id and a reason (`timeout`, `network`, `status`, `response`, `abandoned`) and never a channel; and one line when a hub pauses itself, with the reason, the shard, a count and its threshold |
 | Rate limiter             | Counts of requests per client address and endpoint, over one minute, in the memory of Cloudflare's rate limiter |
 | `/api/status`            | Counts per hub, the pause of a hub and the version of the deployment   |
 | Browser, local storage   | The theme choice under `theme`, once the button in the header was used. Not on overlay pages |

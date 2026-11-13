@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { handleApi } from "../../src/worker/api";
+import { handleApi, health } from "../../src/worker/api";
 import type { Env } from "../../src/worker/env";
 import { shardOf } from "../../src/worker/relay/shard";
 
@@ -94,6 +94,60 @@ describe("handleApi", () => {
         const bindings = { RATE_LIMIT: { limit: broken }, ANALYTICS: { writeDataPoint: broken } };
         const { env } = fakeEnv(bindings as unknown as Partial<Env>);
         assert.equal(await call(env, CHANNEL, COUNTED), UPGRADED);
+    });
+
+    it("names the shard and the reason when a hub does not take the connection", async (t) => {
+        // Enabling the mock clock warns on stderr; mock afterwards so that line is not the log.
+        t.mock.timers.enable({ apis: ["setTimeout"] });
+        const logged = t.mock.method(console, "error", () => {});
+        const response = call(fakeEnv({}, () => new Promise<Response>(() => {})).env, CHANNEL);
+        await new Promise((resolve) => setImmediate(resolve));
+        t.mock.timers.tick(5000);
+        assert.deepEqual(await refusal(response), [503, "relay_unavailable"]);
+        const lines = logged.mock.calls.map((call) => String(call.arguments[0]));
+        assert.match(lines.join("\n"), /^hub_unavailable shard=\d+ Error: timed out$/m);
+    });
+
+    it("does not log the channel when a hub failure names the request", async (t) => {
+        const logged = t.mock.method(console, "error", () => {});
+        const answer = () =>
+            Promise.reject(
+                new Error("fetch failed https://chat.example/api/irc?channel=somechannel"),
+            );
+        assert.deepEqual(await refusal(call(fakeEnv({}, answer).env, CHANNEL)), [
+            503,
+            "relay_unavailable",
+        ]);
+        const text = logged.mock.calls.map((call) => String(call.arguments[0])).join("\n");
+        assert.match(text, /hub_unavailable shard=\d+ Error: fetch failed$/m);
+        assert.equal(text.includes("somechannel"), false);
+        assert.equal(text.includes("?"), false);
+    });
+
+    it("answers /health from the version binding alone", async () => {
+        const version = { id: "test-version", tag: "", timestamp: "" };
+        const { env, hubs } = fakeEnv({ CF_VERSION_METADATA: version } as Partial<Env>);
+        const response = await health(new Request("https://chat.example/health"), env);
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("cache-control"), "no-store");
+        assert.deepEqual(await response.json(), { ok: true, version: version.id });
+        const missing = await health(new Request("https://chat.example/health"), fakeEnv().env);
+        assert.deepEqual(await missing.json(), { ok: true, version: null });
+        const head = await health(
+            new Request("https://chat.example/health", { method: "HEAD" }),
+            env,
+        );
+        assert.equal(head.status, 200);
+        assert.equal(await head.text(), "");
+        assert.deepEqual(
+            await refusal(
+                Promise.resolve(
+                    health(new Request("https://chat.example/health", { method: "POST" }), env),
+                ),
+            ),
+            [405, "method_not_allowed"],
+        );
+        assert.equal(hubs.length, 0);
     });
 
     it("answers 503 when a hub fails, hangs or does not upgrade, and hands on its refusal", async (t) => {

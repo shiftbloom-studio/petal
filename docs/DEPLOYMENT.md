@@ -15,7 +15,8 @@ The Worker and everything that belongs to it carry the product's name: the Worke
 | `/setup` (redirects to `/#setup`), unknown paths (404) | The Worker     | One Worker request |
 | `/api/irc` (chat of one channel, WebSocket) | The Worker passes the connection to a `ChatHub` Durable Object, which reads the channel from Twitch | One Worker request and one Durable Object request per connection, plus the time the hub spends in memory |
 | `/api/data/...` (lists of emotes, badges and name paints) | The Worker's data gateway: from memory or KV, otherwise from the provider | One Worker request, usually one KV read, one KV write per refresh |
-| `/api/status` (health)                    | The Worker, which asks every hub | One Worker request and one Durable Object request per hub |
+| `/health`                                 | The Worker, from the version binding only | One Worker request |
+| `/api/status` (relay status)              | The Worker, which asks every hub | One Worker request and one Durable Object request per hub |
 | Emote and badge images, live updates of 7TV, BetterTTV and FrankerFaceZ | The providers, directly from the browser | Never reaches Cloudflare |
 
 An overlay that loads costs one Worker request for the page, one for the chat connection and about a dozen for provider data. While it runs, a chat line costs nothing: messages from a hub to an overlay are not billed, and Cloudflare answers the overlay's keep-alive without running code. What is billed while overlays are connected is the time the hubs spend in memory.
@@ -116,6 +117,7 @@ Open `https://petal.shiftbloom.studio` and check these in a browser; command lin
 | `/chat/<channel>?size=3&names=0` | The overlay with large text and without user names |
 | `/chat/<channel>?demo=1` | The overlay with sample messages, without a chat connection |
 | `/no-such-page`      | 404 page                                  |
+| `/health`            | JSON `{ ok: true, version }` with the deployment id; no hub and no provider is asked |
 | `/api/status`        | JSON; after the overlay of a channel was opened, one hub reports a client and a joined channel |
 | `/api/data/bttv/3/cached/emotes/global` | JSON with the response header `x-petal-cache` |
 

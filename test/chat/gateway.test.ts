@@ -42,6 +42,21 @@ for (const [when, answer, result, asked] of [
     });
 }
 
+it("gives up on the provider itself after 8 seconds", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    t.mock.method(console, "warn", () => {});
+    t.after(useLocation("https://chat.shiftbloom.studio/chat/forsen?direct=1"));
+    const hangs: FetchAnswer = (init) =>
+        new Promise((_, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        });
+    const fetches = stubFetch({ [PROVIDER]: hangs });
+    t.after(fetches);
+    const result = fetchJson(PROVIDER);
+    t.mock.timers.tick(8000);
+    await assert.rejects(result);
+});
+
 it("asks the provider when the gateway has not answered after 8 seconds", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     /** Never answers, and fails like fetch() does once the request is aborted. */
