@@ -14,8 +14,7 @@ export const GATEWAY_PREFIXES: Readonly<Record<string, string>> = {
     "https://api.ivr.fi/": "/api/data/ivr/",
 };
 
-/** The gateway itself gives a provider six seconds; longer than that and it is stuck. */
-const GATEWAY_TIMEOUT_MS = 8000;
+export const PROVIDER_FETCH_TIMEOUT_MS = 8_000;
 
 /** On every answer of the gateway, and on nothing else that may answer under its path. */
 const GATEWAY_HEADER = "x-petal-cache";
@@ -33,28 +32,70 @@ export function gatewayUrl(url: string): string | undefined {
     return undefined;
 }
 
+const NOT_FOUND = 404;
+
 async function readJson<T>(response: Response, url: string): Promise<T | undefined> {
-    if (response.status === 404) return undefined;
+    if (response.status === NOT_FOUND) return undefined;
     if (!response.ok) throw new Error(`${url} answered ${response.status}`);
     return (await response.json()) as T;
 }
 
-async function fetchFromGateway<T>(url: string, request?: JsonRequest): Promise<T | undefined> {
-    const deadline = new AbortController();
-    const timer = setTimeout(() => deadline.abort(), GATEWAY_TIMEOUT_MS);
-    try {
-        const response = await fetch(url, { ...request, signal: deadline.signal });
-        // A 404 from the gateway is the provider's answer. A 404 from whatever else serves
-        // this origin, such as a deployment without the gateway, says nothing about the data.
-        const answer = response.ok || response.status === 404;
-        if (answer && !response.headers.has(GATEWAY_HEADER)) {
-            throw new Error(`${url} is not the gateway`);
-        }
-        // Awaited here, so the deadline covers the body as well.
-        return await readJson<T>(response, url);
-    } finally {
-        clearTimeout(timer);
+interface Deadline {
+    signal: AbortSignal;
+    elapsed: Promise<never>;
+    stop: () => void;
+}
+
+function deadlineAfter(milliseconds: number): Deadline {
+    const controller = new AbortController();
+    let stop = () => {};
+    const elapsed = new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => {
+            controller.abort();
+            reject(controller.signal.reason);
+        }, milliseconds);
+        stop = () => clearTimeout(timer);
+    });
+    return { signal: controller.signal, elapsed, stop };
+}
+
+function providerStatus(response: Response): boolean {
+    return response.ok || response.status === NOT_FOUND;
+}
+
+function requireGatewayResponse(response: Response, url: string): void {
+    if (providerStatus(response) && !response.headers.has(GATEWAY_HEADER)) {
+        throw new Error(`${url} is not the gateway`);
     }
+}
+
+function preventUnhandledRejection<T>(work: Promise<T>): Promise<T> {
+    work.catch(() => undefined);
+    return work;
+}
+
+async function readWithinTimeout<T>(
+    url: string,
+    request: JsonRequest | undefined,
+    read: (response: Response) => Promise<T>,
+): Promise<T> {
+    const deadline = deadlineAfter(PROVIDER_FETCH_TIMEOUT_MS);
+    try {
+        const response = await Promise.race([
+            preventUnhandledRejection(fetch(url, { ...request, signal: deadline.signal })),
+            deadline.elapsed,
+        ]);
+        return await Promise.race([preventUnhandledRejection(read(response)), deadline.elapsed]);
+    } finally {
+        deadline.stop();
+    }
+}
+
+async function fetchFromGateway<T>(url: string, request?: JsonRequest): Promise<T | undefined> {
+    return readWithinTimeout(url, request, async (response) => {
+        requireGatewayResponse(response, url);
+        return readJson<T>(response, url);
+    });
 }
 
 /**
@@ -71,5 +112,5 @@ export async function fetchJson<T>(url: string, request?: JsonRequest): Promise<
             console.warn("[gateway] no answer, asking the provider directly", error);
         }
     }
-    return readJson<T>(await fetch(url, request), url);
+    return readWithinTimeout(url, request, (response) => readJson<T>(response, url));
 }

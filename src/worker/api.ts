@@ -3,6 +3,7 @@ import { record, recordGateway } from "./analytics";
 import type { Env } from "./env";
 import { handleData } from "./gateway/index";
 import type { HubStatus } from "./hub";
+import { logPlatformError, PlatformError, PlatformEvent } from "./log";
 import { withinLimit } from "./rate-limit";
 import { normaliseChannel, shardOf } from "./relay/shard";
 
@@ -18,7 +19,7 @@ const MAX_SHARDS = 64;
 const HUB_LOCATION: DurableObjectLocationHint = "weur";
 
 /** An overlay gives the relay 15 seconds; answering sooner sends it to Twitch sooner. */
-const HUB_TIMEOUT_MS = 5000;
+export const HUB_TIMEOUT_MS = 5000;
 const STATUS_TIMEOUT_MS = 3000;
 
 const DATA_PREFIX = "/api/data/";
@@ -163,7 +164,7 @@ async function chat(request: Request, env: Env, url: URL): Promise<Response> {
     try {
         response = await within(HUB_TIMEOUT_MS, hub(env, shard).fetch(request));
     } catch (error) {
-        console.error("hub did not take the connection", shard, error);
+        logPlatformError(new PlatformError(PlatformEvent.HubUnavailable, error, { shard }));
         return relayUnavailable(env, shard);
     }
     if (response.status === 101) {
@@ -198,7 +199,7 @@ async function shardStatus(env: Env, shard: number): Promise<ShardStatus> {
         );
         return { ...status, shard, available: true };
     } catch (error) {
-        console.error("hub did not report its status", shard, error);
+        logPlatformError(new PlatformError(PlatformEvent.HubStatusUnavailable, error, { shard }));
         return { shard, available: false };
     }
 }
@@ -221,6 +222,26 @@ async function status(request: Request, env: Env): Promise<Response> {
         shards,
     };
     return json(body);
+}
+
+const HEALTH_METHODS = new Set(["GET", "HEAD"]);
+const HEALTH_ALLOW = "GET, HEAD";
+
+export const HEALTH_PATH = "/health";
+
+export function health(request: Request, env: Pick<Env, "CF_VERSION_METADATA">): Response {
+    if (!HEALTH_METHODS.has(request.method)) {
+        return refuse("method_not_allowed", 405, { allow: HEALTH_ALLOW });
+    }
+    if (request.method === "HEAD") {
+        return new Response(null, { status: 200, headers: JSON_HEADERS });
+    }
+    return json({ ok: true, version: env.CF_VERSION_METADATA?.id ?? null });
+}
+
+function channelFreeRoute(pathname: string): string {
+    if (pathname.startsWith(DATA_PREFIX)) return "data";
+    return pathname;
 }
 
 /**
@@ -251,8 +272,11 @@ export async function handleApi(
         if (url.pathname === "/api/status") return await status(request, env);
         return refuse("not_found", 404);
     } catch (error) {
-        // Neither the path nor the query is logged: both can name a channel.
-        console.error("api request failed", data ? "data" : url.pathname, error);
+        logPlatformError(
+            new PlatformError(PlatformEvent.ApiFailed, error, {
+                route: channelFreeRoute(url.pathname),
+            }),
+        );
         return refuse("unavailable", 503, data ? GATEWAY_REFUSED : undefined);
     }
 }
