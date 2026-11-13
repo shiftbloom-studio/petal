@@ -11,7 +11,6 @@ export default {
     ...nitroWorker,
     fetch(request, env, context) {
         const url = new URL(request.url);
-        // Before Nitro, so a monitor is not rendered a page and no provider is asked.
         if (url.pathname === "/health") return health(request, env);
         if (url.pathname.startsWith("/api/")) {
             return handleApi(request, env, context, url);

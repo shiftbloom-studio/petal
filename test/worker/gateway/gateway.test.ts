@@ -15,7 +15,8 @@ const FFZ_ROOM = "/ffz/v1/room/id/50985620";
 const FFZ_GLOBAL = "/ffz/v1/set/global";
 const START = Date.UTC(2026, 8, 29, 12);
 
-const paintId = (n: number) => `01FQB6K5T0000BDD0YMN2${String(n).padStart(5, "0")}`;
+const SEVENTV_ULID_PREFIX = "01FQB6K5T0000BDD0YMN2";
+const paintId = (n: number) => `${SEVENTV_ULID_PREFIX}${String(n).padStart(5, "0")}`;
 const paint = (id: string) => ({ id, name: "Paint", data: { layers: [], shadows: [] } });
 
 /** Answers a paints query the way 7TV does for paints it knows. */
@@ -175,12 +176,10 @@ describe("provider failures", () => {
         await settle();
         assert.equal(stored.size, 0);
         assert.equal(calls.length, 1);
-        const [message, detail] = warned.mock.calls[0].arguments as [
-            string,
-            { provider: string; route: string; reason: string },
-        ];
-        assert.equal(message, "upstream_unavailable");
-        assert.deepEqual(detail, { provider: "ffz", route: "ffz.global", reason: "response" });
+        assert.equal(
+            warned.mock.calls[0]?.arguments[0],
+            "upstream_unavailable provider=ffz route=ffz.global reason=response",
+        );
     });
 
     it("serves a copy that has outlived its window when the provider fails", async () => {
@@ -194,7 +193,6 @@ describe("provider failures", () => {
         assert.equal(stale.status, 200);
         assert.equal(cacheOf(stale), "STALE; layer=memory");
         assert.equal(calls.length, 2);
-        // The failure leaves the provider alone, so the retry neither fetches nor spends a miss.
         const again = await get(FFZ_ROOM);
         assert.equal(again.status, 200);
         assert.equal(cacheOf(again), "STALE; layer=memory");
@@ -219,12 +217,10 @@ describe("provider failures", () => {
             Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" })),
         );
         assert.equal((await get(FFZ_ROOM)).status, 502);
-        const [message, detail] = warned.mock.calls[0].arguments as [
-            string,
-            { provider: string; route: string; reason: string },
-        ];
-        assert.equal(message, "upstream_unavailable");
-        assert.deepEqual(detail, { provider: "ffz", route: "ffz.room", reason: "timeout" });
+        assert.equal(
+            warned.mock.calls[0]?.arguments[0],
+            "upstream_unavailable provider=ffz route=ffz.room reason=timeout",
+        );
         assert.equal(JSON.stringify(warned.mock.calls).includes("50985620"), false);
     });
 

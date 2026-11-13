@@ -14,11 +14,6 @@ export const GATEWAY_PREFIXES: Readonly<Record<string, string>> = {
     "https://api.ivr.fi/": "/api/data/ivr/",
 };
 
-/**
- * The gateway itself gives a provider six seconds and answers before this. The direct attempt
- * gets the same limit: a provider that hangs must fail the load, so it can be tried again later
- * instead of holding it open for the rest of the stream.
- */
 const GATEWAY_TIMEOUT_MS = 8000;
 
 /** On every answer of the gateway, and on nothing else that may answer under its path. */
@@ -43,7 +38,6 @@ async function readJson<T>(response: Response, url: string): Promise<T | undefin
     return (await response.json()) as T;
 }
 
-/** Gives up after {@link GATEWAY_TIMEOUT_MS}, including while the body is still downloading. */
 function fetchWithinDeadline(url: string, request?: JsonRequest): Promise<Response> {
     const deadline = new AbortController();
     const timer = setTimeout(() => deadline.abort(), GATEWAY_TIMEOUT_MS);

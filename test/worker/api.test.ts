@@ -105,7 +105,7 @@ describe("handleApi", () => {
         t.mock.timers.tick(5000);
         assert.deepEqual(await refusal(response), [503, "relay_unavailable"]);
         const lines = logged.mock.calls.map((call) => String(call.arguments[0]));
-        assert.match(lines.join("\n"), /^hub_unavailable shard=\d+ Error: timed out$/m);
+        assert.match(lines.join("\n"), /^hub_unavailable shard=\d+ error=Error: timed out$/m);
     });
 
     it("does not log the channel when a hub failure names the request", async (t) => {
@@ -119,7 +119,7 @@ describe("handleApi", () => {
             "relay_unavailable",
         ]);
         const text = logged.mock.calls.map((call) => String(call.arguments[0])).join("\n");
-        assert.match(text, /hub_unavailable shard=\d+ Error: fetch failed$/m);
+        assert.match(text, /hub_unavailable shard=\d+ error=Error: fetch failed$/m);
         assert.equal(text.includes("somechannel"), false);
         assert.equal(text.includes("?"), false);
     });
