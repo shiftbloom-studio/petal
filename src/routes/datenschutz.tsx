@@ -167,21 +167,22 @@ export default function Datenschutz() {
                 Das Overlay zeigt Chatnachrichten samt Anzeigename, Farbe und Badges im Stream, so
                 wie Twitch sie liefert, sofern der Link der Streamerin oder des Streamers Namen oder
                 Badges nicht ausblendet. Auf dem Weg von Twitch zum Overlay laufen die Nachrichten
-                des angezeigten Kanals durch unser Relay bei Cloudflare. Das Relay hält sie nur im
-                Arbeitsspeicher: Es reicht jede Nachricht weiter und behält die letzten 50
-                Nachrichten eines Kanals für Overlays, die sich später verbinden, bis neuere
-                Nachrichten sie verdrängen oder bis etwa eine Minute, nachdem das letzte Overlay
-                geschlossen wurde, das den Kanal anzeigt. Es wertet Chatnachrichten nicht aus,
-                protokolliert sie aber wie unter „Hosting“ beschrieben. Im unter „Chat-Overlay“
-                beschriebenen Ersatzfall gelangen die Nachrichten von Twitch unmittelbar in den
-                Browser, in dem das Overlay läuft.
+                des angezeigten Kanals durch unser Relay bei Cloudflare. Das Relay reicht jede
+                Nachricht weiter und behält die letzten 50 Nachrichten eines Kanals im
+                Arbeitsspeicher für Overlays, die sich später verbinden, bis neuere Nachrichten sie
+                verdrängen oder bis etwa eine Minute, nachdem das letzte Overlay geschlossen wurde,
+                das den Kanal anzeigt. Es wertet Chatnachrichten nicht aus; außerhalb dieses
+                Arbeitsspeichers liegen sie nur im unter „Hosting“ beschriebenen Protokoll. Im unter
+                „Chat-Overlay“ beschriebenen Ersatzfall gelangen die Nachrichten von Twitch
+                unmittelbar in den Browser, in dem das Overlay läuft.
             </p>
             <p>
                 Das Overlay selbst behält die letzten 100 Nachrichten im Arbeitsspeicher und
                 vergisst sie, sobald es geschlossen wird. Von Moderatoren gelöschte Nachrichten und
                 Nachrichten von Accounts, die zeitweise oder dauerhaft gesperrt werden, verschwinden
-                auch aus dem Arbeitsspeicher des Relays und aus dem Overlay. Ob der Chat im Stream
-                erscheint, entscheidet, wer streamt.
+                auch aus dem Arbeitsspeicher des Relays und aus dem Overlay; ein Eintrag im
+                Protokoll bleibt, bis das Protokoll gelöscht wird. Ob der Chat im Stream erscheint,
+                entscheidet, wer streamt.
             </p>
             <p>
                 Wir erhalten diese Nachrichten von Twitch, nicht von dir. Rechtsgrundlage ist unser
