@@ -1,5 +1,5 @@
 import nitroWorker from "#petal/nitro-worker";
-import { handleApi } from "./api";
+import { HEALTH_PATH, handleApi, health } from "./api";
 import type { Env } from "./env";
 import { annotate } from "./trace";
 
@@ -12,6 +12,7 @@ export default {
     ...nitroWorker,
     fetch(request, env, context) {
         const url = new URL(request.url);
+        if (url.pathname === HEALTH_PATH) return health(request, env);
         if (url.pathname.startsWith("/api/")) {
             return handleApi(request, env, context, url);
         }
