@@ -42,9 +42,9 @@ export default function Privacy() {
                 requests to the cache, redirects and error pages) are also logged, including the IP
                 address, the approximate location Cloudflare derives from it, and the address
                 requested. The address of an overlay names its Twitch channel and carries the
-                settings of its link, among them the accounts it is told to hide. Chat messages are
-                never logged. We use these logs only to fix errors and to prevent abuse, and they
-                are deleted after at most 7 days.
+                settings of its link, among them the accounts it is told to hide. Chat messages that
+                pass through the relay are logged too, with the sender's login. We use these logs
+                only to fix errors and to prevent abuse, and they are deleted after at most 7 days.
             </p>
             <p>
                 To prevent abuse, the Worker also counts the requests of an IP address over one
@@ -158,9 +158,9 @@ export default function Privacy() {
                 at Cloudflare. The relay holds them in memory only: it passes each message on and
                 keeps the latest 50 messages of a channel for overlays that connect later, until
                 newer messages replace them or until about a minute after the last overlay that
-                shows the channel has closed. It doesn't store, log or analyze chat messages. In the
-                fallback described under "Chat overlay", the messages go from Twitch straight to the
-                browser that runs the overlay.
+                shows the channel has closed. It doesn't analyze chat messages, but logs them as
+                described under "Hosting". In the fallback described under "Chat overlay", the
+                messages go from Twitch straight to the browser that runs the overlay.
             </p>
             <p>
                 The overlay itself keeps the latest 100 messages in memory and forgets them when
