@@ -43,9 +43,10 @@ export default function Datenschutz() {
                 zusätzlich protokolliert, samt IP-Adresse, dem ungefähren Standort, den Cloudflare
                 daraus ableitet, und der aufgerufenen Adresse. Die Adresse eines Overlays nennt den
                 Twitch-Kanal und enthält die Einstellungen des Links, darunter die Accounts, die es
-                ausblenden soll. Chatnachrichten, die durch das Relay laufen, werden mit dem Login
-                des Absenders ebenfalls protokolliert. Wir nutzen diese Protokolle nur, um Fehler zu
-                beheben und Missbrauch zu verhindern; sie werden nach spätestens 7 Tagen gelöscht.
+                ausblenden soll. Chatnachrichten, die durch das Relay laufen, werden mit dem
+                Benutzernamen des Absenders ebenfalls protokolliert. Wir nutzen diese Protokolle
+                nur, um Fehler zu beheben und Missbrauch zu verhindern; sie werden nach spätestens 7
+                Tagen gelöscht.
             </p>
             <p>
                 Um Missbrauch zu verhindern, zählt der Worker außerdem die Anfragen einer IP-Adresse

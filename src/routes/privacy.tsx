@@ -43,8 +43,9 @@ export default function Privacy() {
                 address, the approximate location Cloudflare derives from it, and the address
                 requested. The address of an overlay names its Twitch channel and carries the
                 settings of its link, among them the accounts it is told to hide. Chat messages that
-                pass through the relay are logged too, with the sender's login. We use these logs
-                only to fix errors and to prevent abuse, and they are deleted after at most 7 days.
+                pass through the relay are logged too, with the sender's user name. We use these
+                logs only to fix errors and to prevent abuse, and they are deleted after at most 7
+                days.
             </p>
             <p>
                 To prevent abuse, the Worker also counts the requests of an IP address over one
