@@ -151,6 +151,8 @@ export interface HubHost<Socket extends ClientSocket> {
     reset(): void;
     paused(pause: PauseStart): void;
     resumed(reason: PauseReason): void;
+    /** Every chat line the hub relays, for a host that keeps a chat log. */
+    chat?(channel: string, line: string, info: IrcLineInfo): void;
 }
 
 /** What `/api/status` tells about one hub. Counts only: no channel, no name, no chat. */
@@ -743,6 +745,9 @@ export class HubCore<Socket extends ClientSocket> {
             channel.roomstate = mergeRoomstate(channel.roomstate, line);
         }
         channel.replay.observe(line, info);
+        if (info.command === "PRIVMSG" || info.command === "USERNOTICE") {
+            this.#host.chat?.(name, line, info);
+        }
         for (const client of channel.live) this.#send(client, line);
         this.#guardWatchdog(now);
     }

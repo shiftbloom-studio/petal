@@ -51,6 +51,26 @@ export function tagValue(line: string, info: IrcLineInfo, name: string): string 
     return undefined;
 }
 
+/** Who said what, as the chat log of the hub keeps it. */
+export interface ChatMessage {
+    /** Login of the sender; a USERNOTICE names it in a tag instead of the prefix. */
+    login: string | undefined;
+    /** Empty when a USERNOTICE, such as a subscription, came without words. */
+    text: string;
+}
+
+/** Reads a PRIVMSG or USERNOTICE. Twitch always marks the text with a colon. */
+export function chatMessage(line: string, info: IrcLineInfo): ChatMessage {
+    let login = tagValue(line, info, "login");
+    if (line.charCodeAt(info.bodyStart) === COLON) {
+        const bang = line.indexOf("!", info.bodyStart);
+        const space = line.indexOf(" ", info.bodyStart);
+        if (bang !== -1 && bang < space) login = line.slice(info.bodyStart + 1, bang);
+    }
+    const text = line.indexOf(" :", info.bodyStart);
+    return { login, text: text === -1 ? "" : line.slice(text + 2) };
+}
+
 /** Inserts a tag in front of the existing ones, or starts a tag section. */
 export function withTag(line: string, tag: string): string {
     return line.charCodeAt(0) === AT ? `@${tag};${line.slice(1)}` : `@${tag} ${line}`;

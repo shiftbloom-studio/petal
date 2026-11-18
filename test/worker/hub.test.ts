@@ -37,6 +37,9 @@ class Rig {
     getAlarm = async () => null;
     setAlarm = async () => {};
     report = () => {};
+    /** What the hub hands to a chat log: the channel and the line. */
+    readonly chatted: string[][] = [];
+    chat = (channel: string, line: string) => void this.chatted.push([channel, line]);
 
     constructor(overrides: Partial<HubConfig> = {}) {
         const upstream = { ...UPSTREAM_DEFAULTS, url: "wss://irc.example.test" };
@@ -86,6 +89,18 @@ describe("hub relay", () => {
         upstream.receive(line);
         assert.deepEqual(alpha.frames.slice(1), [line]);
         assert.deepEqual(beta.frames, [joinEcho("justinfan777", "beta")]);
+    });
+
+    it("hands the chat it relays to the host's chat log, and nothing else", async () => {
+        const rig = new Rig();
+        await rig.joinLive("alpha");
+        const line = chatLine("alpha", "m-1");
+        rig.twitch.last.receive(
+            "@room-id=1;slow=0 :tmi.twitch.tv ROOMSTATE #alpha",
+            line,
+            chatLine("elsewhere", "m-2"),
+        );
+        assert.deepEqual(rig.chatted, [["alpha", line]]);
     });
 
     it("greets a later overlay with the room state and the newest lines in one frame", async () => {
