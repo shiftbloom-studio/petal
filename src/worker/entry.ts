@@ -1,6 +1,7 @@
 import nitroWorker from "#petal/nitro-worker";
 import { handleApi } from "./api";
 import type { Env } from "./env";
+import { annotate } from "./trace";
 
 // Wrangler looks for Durable Object classes among the exports of the Worker's main module.
 export { ChatHub } from "./hub";
@@ -14,6 +15,7 @@ export default {
         if (url.pathname.startsWith("/api/")) {
             return handleApi(request, env, context, url);
         }
+        annotate({ "petal.route": "page" });
         return nitroWorker.fetch(request, env, context);
     },
 } satisfies ExportedHandler<Env>;
