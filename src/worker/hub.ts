@@ -36,32 +36,19 @@ export interface HubEnv {
     RELAY_PAUSE_LINES_PER_MINUTE?: string;
     RELAY_PAUSE_FRAMES_PER_MINUTE?: string;
     RELAY_PAUSE_MINUTES?: string;
-    /** `true` writes every relayed chat line to the log. */
-    CHAT_LOG?: string;
 }
 
-/** One relayed chat line as the log holds it. */
 export interface ChatLogEntry {
-    /** When the hub received the line, in milliseconds since the epoch. */
     at: number;
     channel: string;
-    /** `PRIVMSG` or `USERNOTICE`. */
     command: string;
     login: string | undefined;
-    /** The message id of Twitch. */
     id: string | undefined;
     text: string;
 }
 
-/**
- * Chat waiting for the hub's next alarm. Lines arrive on the connections to Twitch, outside
- * of any request, and every line of the log is a billed event: the alarm writes them in
- * batches. What a hub holds when it leaves memory is lost.
- */
 export class ChatLog {
-    /** A batch stays far below the 256 KB a line of the log may have. */
     static readonly BATCH = 50;
-    /** A hub that relays more between two alarms is about to pause itself. */
     static readonly LIMIT = 20_000;
 
     #entries: ChatLogEntry[] = [];
@@ -76,7 +63,6 @@ export class ChatLog {
         this.#entries.push({ at, channel, command: info.command, id, ...chatMessage(line, info) });
     }
 
-    /** Hands every batch to `write` and forgets it. */
     flush(shard: number, write: (message: string, batch: object) => void): void {
         const entries = this.#entries;
         const dropped = this.#dropped;
@@ -87,11 +73,6 @@ export class ChatLog {
         }
         if (dropped > 0) write("chat lines not logged", { shard, dropped });
     }
-}
-
-function switchedOn(raw: string | undefined): boolean {
-    const value = raw?.trim().toLowerCase();
-    return value === "true" || value === "1" || value === "on" || value === "yes";
 }
 
 const DEFAULT_IRC_URL = "wss://irc-ws.chat.twitch.tv:443";
@@ -136,14 +117,12 @@ function count(raw: string | undefined, fallback: number, least: number): number
 export class ChatHub extends DurableObject<HubEnv> {
     protected readonly core: HubCore<WebSocket>;
     #shard: number | null;
-    #chat: ChatLog | undefined;
+    #chat = new ChatLog();
 
     constructor(ctx: DurableObjectState, env: HubEnv) {
         super(ctx, env);
         const name = HUB_NAME.exec(ctx.id.name ?? "");
         this.#shard = name ? Number(name[1]) : null;
-        const chat = switchedOn(env.CHAT_LOG) ? new ChatLog() : undefined;
-        this.#chat = chat;
         this.core = new HubCore<WebSocket>(
             this.config(env),
             {
@@ -165,7 +144,7 @@ export class ChatHub extends DurableObject<HubEnv> {
                 reset: () => ctx.abort("hub reset itself"),
                 paused: (pause) => this.#paused(pause),
                 resumed: (reason) => this.#resumed(reason),
-                chat: chat && ((channel, line, info) => chat.add(Date.now(), channel, line, info)),
+                chat: (channel, line, info) => this.#chat.add(Date.now(), channel, line, info),
             },
             SYSTEM_RUNTIME,
         );
@@ -274,7 +253,7 @@ export class ChatHub extends DurableObject<HubEnv> {
         try {
             await this.core.alarm();
         } finally {
-            this.#chat?.flush(this.#shard ?? -1, (message, batch) => console.log(message, batch));
+            this.#chat.flush(this.#shard ?? -1, (message, batch) => console.log(message, batch));
         }
     }
 

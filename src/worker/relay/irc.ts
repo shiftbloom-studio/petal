@@ -51,15 +51,11 @@ export function tagValue(line: string, info: IrcLineInfo, name: string): string 
     return undefined;
 }
 
-/** Who said what, as the chat log of the hub keeps it. */
 export interface ChatMessage {
-    /** Login of the sender; a USERNOTICE names it in a tag instead of the prefix. */
     login: string | undefined;
-    /** Empty when a USERNOTICE, such as a subscription, came without words. */
     text: string;
 }
 
-/** Reads a PRIVMSG or USERNOTICE. Twitch always marks the text with a colon. */
 export function chatMessage(line: string, info: IrcLineInfo): ChatMessage {
     let login = tagValue(line, info, "login");
     if (line.charCodeAt(info.bodyStart) === COLON) {

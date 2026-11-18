@@ -37,7 +37,6 @@ class Rig {
     getAlarm = async () => null;
     setAlarm = async () => {};
     report = () => {};
-    /** What the hub hands to a chat log: the channel and the line. */
     readonly chatted: string[][] = [];
     chat = (channel: string, line: string) => void this.chatted.push([channel, line]);
 

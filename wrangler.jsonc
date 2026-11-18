@@ -66,12 +66,7 @@
     "RELAY_PAUSE_CONNECTS_PER_MINUTE": "3000",
     "RELAY_PAUSE_LINES_PER_MINUTE": "300000",
     "RELAY_PAUSE_FRAMES_PER_MINUTE": "10000",
-    "RELAY_PAUSE_MINUTES": "15",
-    // The chat log. With "true", every hub writes the chat it relays to Workers Logs, in
-    // batches with its alarm every 30 seconds: channel, login, message id and text, kept as
-    // long as the logs are. Anything else, or leaving it out, writes no chat anywhere. The
-    // privacy policy has to say what is written here.
-    "CHAT_LOG": "true"
+    "RELAY_PAUSE_MINUTES": "15"
   },
 
   // Preview builds of other branches. A preview inherits no bindings or variables, so what the

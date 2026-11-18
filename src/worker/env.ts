@@ -48,10 +48,4 @@ export interface Env {
     RELAY_PAUSE_LINES_PER_MINUTE?: string;
     RELAY_PAUSE_FRAMES_PER_MINUTE?: string;
     RELAY_PAUSE_MINUTES?: string;
-
-    /**
-     * `true` makes the hubs write every chat line they relay to Workers Logs: channel, login,
-     * message id and text. Chat on an overlay's direct connection never reaches the Worker.
-     */
-    CHAT_LOG?: string;
 }

@@ -315,7 +315,6 @@ All are optional text variables in `vars`. `wrangler.jsonc` sets the first three
 | `RELAY_ENABLED`             | `true`   | `false` switches the relay off; so do `0`, `off` and `no` |
 | `RELAY_SHARDS`              | `4`      | Number of hubs                                           |
 | `TWITCH_IRC_URL`            | `wss://irc-ws.chat.twitch.tv:443` | Where the hubs connect to; tests point it at a mock server |
-| `CHAT_LOG`                  | off; `true` in `wrangler.jsonc` | `true` writes the chat the hubs relay to Workers Logs, as lines named `chat` with up to 50 messages each: channel, login, message id and text. One log event per 50 messages |
 | `MAX_CHANNELS_PER_UPSTREAM` | `50`     | Channels per connection to Twitch                        |
 | `MAX_CLIENTS_PER_HUB`       | `5000`   | Overlay connections a hub takes before it refuses        |
 | `MAX_CHANNELS_PER_HUB`      | `1000`   | Channels a hub takes before it refuses                   |
