@@ -5,6 +5,7 @@ import { handleData } from "./gateway/index";
 import type { HubStatus } from "./hub";
 import { withinLimit } from "./rate-limit";
 import { normaliseChannel, shardOf } from "./relay/shard";
+import { annotate } from "./trace";
 
 const DEFAULT_SHARDS = 4;
 /** A slip such as `400` would make every status request wake that many hubs. */
@@ -22,6 +23,9 @@ const HUB_TIMEOUT_MS = 5000;
 const STATUS_TIMEOUT_MS = 3000;
 
 const DATA_PREFIX = "/api/data/";
+
+/** The endpoints by the name their trace spans carry; the query, which names a channel, is not in it. */
+const ROUTES: Record<string, string> = { "/api/irc": "irc", "/api/status": "status" };
 
 /** Responses under `/api/` never pass through Nitro, so they bring their own headers. */
 const JSON_HEADERS = {
@@ -65,6 +69,7 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 }
 
 function refuse(code: string, status: number, headers?: Record<string, string>): Response {
+    annotate({ "petal.refusal": code });
     return json({ error: code }, status, headers);
 }
 
@@ -159,6 +164,7 @@ async function chat(request: Request, env: Env, url: URL): Promise<Response> {
     }
 
     const shard = shardOf(channel, shardCount(env));
+    annotate({ "petal.shard": shard });
     let response: Response;
     try {
         response = await within(HUB_TIMEOUT_MS, hub(env, shard).fetch(request));
@@ -179,6 +185,7 @@ async function chat(request: Request, env: Env, url: URL): Promise<Response> {
             labels: ["hub_refused"],
             values: [response.status, shard],
         });
+        annotate({ "petal.refusal": "hub_refused" });
         return response;
     }
     console.error("hub answered the upgrade with status", response.status, shard);
@@ -237,15 +244,21 @@ export async function handleApi(
     handlers: ApiHandlers = HANDLERS,
 ): Promise<Response> {
     const data = url.pathname.startsWith(DATA_PREFIX);
+    annotate({ "petal.route": data ? "data" : (ROUTES[url.pathname] ?? "unknown") });
     try {
         if (data) {
             if (automated(request)) {
                 recordGateway(env, { route: "none", outcome: "REFUSED", status: 403 });
                 return refuse("automated_client", 403, GATEWAY_REFUSED);
             }
-            return await handlers.data(request, env, context, url, (event) =>
-                recordGateway(env, event),
-            );
+            return await handlers.data(request, env, context, url, (event) => {
+                recordGateway(env, event);
+                annotate({
+                    "petal.gateway.route": event.route,
+                    "petal.gateway.outcome": event.outcome,
+                    "petal.gateway.layer": event.layer,
+                });
+            });
         }
         if (url.pathname === "/api/irc") return await chat(request, env, url);
         if (url.pathname === "/api/status") return await status(request, env);
