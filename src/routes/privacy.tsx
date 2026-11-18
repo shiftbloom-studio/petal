@@ -42,9 +42,10 @@ export default function Privacy() {
                 requests to the cache, redirects and error pages) are also logged, including the IP
                 address, the approximate location Cloudflare derives from it, and the address
                 requested. The address of an overlay names its Twitch channel and carries the
-                settings of its link, among them the accounts it is told to hide. Chat messages are
-                never logged. We use these logs only to fix errors and to prevent abuse, and they
-                are deleted after at most 7 days.
+                settings of its link, among them the accounts it is told to hide. Chat messages that
+                pass through the relay are logged too, with the sender's user name. We use these
+                logs only to fix errors and to prevent abuse, and they are deleted after at most 7
+                days.
             </p>
             <p>
                 To prevent abuse, the Worker also counts the requests of an IP address over one
@@ -155,18 +156,19 @@ export default function Privacy() {
                 The overlay shows chat messages on stream with display name, color and badges, as
                 Twitch delivers them, unless the streamer's link hides names or badges. On their way
                 from Twitch to the overlay, the messages of the channel shown pass through our relay
-                at Cloudflare. The relay holds them in memory only: it passes each message on and
-                keeps the latest 50 messages of a channel for overlays that connect later, until
-                newer messages replace them or until about a minute after the last overlay that
-                shows the channel has closed. It doesn't store, log or analyze chat messages. In the
-                fallback described under "Chat overlay", the messages go from Twitch straight to the
-                browser that runs the overlay.
+                at Cloudflare. The relay passes each message on and keeps the latest 50 messages of
+                a channel in memory for overlays that connect later, until newer messages replace
+                them or until about a minute after the last overlay that shows the channel has
+                closed. It doesn't analyze chat messages; beyond that memory they are kept only in
+                the log described under "Hosting". In the fallback described under "Chat overlay",
+                the messages go from Twitch straight to the browser that runs the overlay.
             </p>
             <p>
                 The overlay itself keeps the latest 100 messages in memory and forgets them when
                 it's closed. Messages deleted by moderators, and messages from accounts that get
-                timed out or banned, disappear from the relay's memory and from the overlay as well.
-                Whether chat appears on a stream is up to the streamer.
+                timed out or banned, disappear from the relay's memory and from the overlay as well;
+                an entry in the log stays until the log is deleted. Whether chat appears on a stream
+                is up to the streamer.
             </p>
             <p>
                 We receive these messages from Twitch, not from you. The legal basis is our
