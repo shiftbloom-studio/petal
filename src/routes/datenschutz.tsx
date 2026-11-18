@@ -43,9 +43,10 @@ export default function Datenschutz() {
                 zusätzlich protokolliert, samt IP-Adresse, dem ungefähren Standort, den Cloudflare
                 daraus ableitet, und der aufgerufenen Adresse. Die Adresse eines Overlays nennt den
                 Twitch-Kanal und enthält die Einstellungen des Links, darunter die Accounts, die es
-                ausblenden soll. Chatnachrichten werden nie protokolliert. Wir nutzen diese
-                Protokolle nur, um Fehler zu beheben und Missbrauch zu verhindern; sie werden nach
-                spätestens 7 Tagen gelöscht.
+                ausblenden soll. Chatnachrichten, die durch das Relay laufen, werden mit dem
+                Benutzernamen des Absenders ebenfalls protokolliert. Wir nutzen diese Protokolle
+                nur, um Fehler zu beheben und Missbrauch zu verhindern; sie werden nach spätestens 7
+                Tagen gelöscht.
             </p>
             <p>
                 Um Missbrauch zu verhindern, zählt der Worker außerdem die Anfragen einer IP-Adresse
@@ -167,21 +168,22 @@ export default function Datenschutz() {
                 Das Overlay zeigt Chatnachrichten samt Anzeigename, Farbe und Badges im Stream, so
                 wie Twitch sie liefert, sofern der Link der Streamerin oder des Streamers Namen oder
                 Badges nicht ausblendet. Auf dem Weg von Twitch zum Overlay laufen die Nachrichten
-                des angezeigten Kanals durch unser Relay bei Cloudflare. Das Relay hält sie nur im
-                Arbeitsspeicher: Es reicht jede Nachricht weiter und behält die letzten 50
-                Nachrichten eines Kanals für Overlays, die sich später verbinden, bis neuere
-                Nachrichten sie verdrängen oder bis etwa eine Minute, nachdem das letzte Overlay
-                geschlossen wurde, das den Kanal anzeigt. Es speichert Chatnachrichten nicht,
-                protokolliert sie nicht und wertet sie nicht aus. Im unter „Chat-Overlay“
-                beschriebenen Ersatzfall gelangen die Nachrichten von Twitch unmittelbar in den
-                Browser, in dem das Overlay läuft.
+                des angezeigten Kanals durch unser Relay bei Cloudflare. Das Relay reicht jede
+                Nachricht weiter und behält die letzten 50 Nachrichten eines Kanals im
+                Arbeitsspeicher für Overlays, die sich später verbinden, bis neuere Nachrichten sie
+                verdrängen oder bis etwa eine Minute, nachdem das letzte Overlay geschlossen wurde,
+                das den Kanal anzeigt. Es wertet Chatnachrichten nicht aus; außerhalb dieses
+                Arbeitsspeichers liegen sie nur im unter „Hosting“ beschriebenen Protokoll. Im unter
+                „Chat-Overlay“ beschriebenen Ersatzfall gelangen die Nachrichten von Twitch
+                unmittelbar in den Browser, in dem das Overlay läuft.
             </p>
             <p>
                 Das Overlay selbst behält die letzten 100 Nachrichten im Arbeitsspeicher und
                 vergisst sie, sobald es geschlossen wird. Von Moderatoren gelöschte Nachrichten und
                 Nachrichten von Accounts, die zeitweise oder dauerhaft gesperrt werden, verschwinden
-                auch aus dem Arbeitsspeicher des Relays und aus dem Overlay. Ob der Chat im Stream
-                erscheint, entscheidet, wer streamt.
+                auch aus dem Arbeitsspeicher des Relays und aus dem Overlay; ein Eintrag im
+                Protokoll bleibt, bis das Protokoll gelöscht wird. Ob der Chat im Stream erscheint,
+                entscheidet, wer streamt.
             </p>
             <p>
                 Wir erhalten diese Nachrichten von Twitch, nicht von dir. Rechtsgrundlage ist unser

@@ -43,8 +43,8 @@ to see.
 - **Made for live.** Subscription notices, `/me` actions and Shared Chat messages are shown, and
   messages removed by moderators, timeouts and bans disappear from the overlay. Every connection
   reconnects on its own, so the source can stay in your scene for the whole stream.
-- **Private by design.** Chat is read anonymously and read-only. It passes through Petal in
-  memory only and is never stored or logged. No cookies, no ads, no analytics of visitors. The
+- **Private by design.** Chat is read anonymously and read-only. What passes through
+  Petal's relay is written to a log that is deleted after 7 days. No cookies, no ads, no analytics of visitors. The
   only thing kept in your browser is your choice of theme, and only once you make one.
 - **Free and open source.** AGPL-3.0-or-later, made and hosted by
   [shiftbloom studio](https://shiftbloom.studio), an open digital studio in Hamburg.
@@ -116,7 +116,7 @@ cache.
 - **Chat** arrives through Petal's own relay. It reads the channel from Twitch over an anonymous,
   read-only connection and passes every line on to the overlays of that channel. It keeps the
   last 50 lines per channel in memory, so an overlay that joins late or reloads does not start
-  empty. Chat is neither stored nor logged nor analysed.
+  empty. The lines it relays are written to the Worker's log, which is kept 7 days; chat is not analysed.
 - **Lists of emotes, badges and name paints** of 7TV, BTTV, FFZ, FFZ:AP, Chatterino and IVR
   arrive through Petal's data gateway, which fetches them from the services and caches them. The
   services do not see your IP address for these requests.
@@ -164,7 +164,7 @@ see [Overlay options](#overlay-options). There is no option for colors.
 
 **Does Petal track me or my viewers?**
 No. Petal has no accounts, sets no cookies and runs no analytics of visitors or advertising. Chat
-passes through Petal's relay in memory and is neither stored nor logged. See the
+that passes through Petal's relay is written to a log that is deleted after 7 days. See the
 [privacy policy](https://petal.shiftbloom.studio/privacy).
 
 **Is Petal a replacement for ChatIS?**
