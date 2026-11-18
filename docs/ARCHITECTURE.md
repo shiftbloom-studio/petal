@@ -251,6 +251,9 @@ prerendered pages, the fonts, the images, `robots.txt` and the files for languag
 other request goes to `src/worker/entry.ts`, the entry of the Worker. It exports the Durable Object
 class and looks at the path:
 
+- `/health` is answered by `src/worker/api.ts` before anything else. It reads the version
+  binding and returns. It does not touch KV, a hub or a provider, so a third-party outage cannot
+  fail it.
 - A path that starts with `/api/` is answered by `src/worker/api.ts` and never reaches Nitro. The
   prefix is exact and case-sensitive.
 - Everything else is passed to the Worker that Nitro builds, unchanged. There, the middleware
@@ -265,6 +268,7 @@ the route rules, and the response of a WebSocket upgrade does not survive that.
 
 | Endpoint                         | Method    | Answer                                               |
 | -------------------------------- | --------- | ---------------------------------------------------- |
+| `/health`                        | GET, HEAD | `{ ok: true, version }` — the running deployment id, or null |
 | `/api/irc?channel=<login>`       | GET with a WebSocket upgrade | The chat of one channel, in the form of Twitch IRC |
 | `/api/data/<prefix>/<path>`      | GET; POST for 7TV paints | Provider data as JSON, with the header `x-petal-cache` |
 | `/api/status`                    | GET       | Counts as JSON                                       |
@@ -539,6 +543,7 @@ The three windows follow each other. While an answer is fresh it is served witho
 provider. In the window after that, lists that every overlay shares are served at once and refreshed
 in the background. Channel data has no such window: a reload of the overlay must show an emote that
 was added a minute ago. In the last window the stored answer is only served when the provider fails.
+A copy still held after that window is served the same way when the provider fails, instead of a 502.
 
 A 404 of a provider means that the channel has no account there. It is stored for the time in the
 table, and served for up to an hour when the provider fails. Lists that always exist have no such
@@ -613,8 +618,9 @@ twice. A replayed line is shown like any other.
 
 **Provider data.** Every REST request goes to the gateway first. After a network error, a timeout of
 8 seconds, an answer without the header `x-petal-cache`, or a status that is neither a success nor
-404, such as 429 or 503, the same request is sent to the provider directly. A 404 of the gateway is
-the provider's answer and is not retried.
+404, such as 429 or 503, the same request is sent to the provider directly, with the same 8 second
+limit. A 404 of the gateway is the provider's answer and is not retried. A provider 404 is cached
+by the gateway and is not an error: it means the channel has no account there.
 
 **Forced direct mode.** `?direct=1` on the overlay URL switches the relay and the gateway off for
 that overlay. The same holds for a page that was not loaded over http(s), such as a local file.
