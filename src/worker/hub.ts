@@ -12,6 +12,7 @@ import {
     type PauseReason,
     type PauseStart,
 } from "./relay/core";
+import { chatMessage, type IrcLineInfo, tagValue } from "./relay/irc";
 import { normaliseChannel } from "./relay/shard";
 import { SYSTEM_RUNTIME, UPSTREAM_DEFAULTS } from "./relay/upstream";
 
@@ -35,6 +36,43 @@ export interface HubEnv {
     RELAY_PAUSE_LINES_PER_MINUTE?: string;
     RELAY_PAUSE_FRAMES_PER_MINUTE?: string;
     RELAY_PAUSE_MINUTES?: string;
+}
+
+export interface ChatLogEntry {
+    at: number;
+    channel: string;
+    command: string;
+    login: string | undefined;
+    id: string | undefined;
+    text: string;
+}
+
+export class ChatLog {
+    static readonly BATCH = 50;
+    static readonly LIMIT = 20_000;
+
+    #entries: ChatLogEntry[] = [];
+    #dropped = 0;
+
+    add(at: number, channel: string, line: string, info: IrcLineInfo): void {
+        if (this.#entries.length >= ChatLog.LIMIT) {
+            this.#dropped += 1;
+            return;
+        }
+        const id = tagValue(line, info, "id");
+        this.#entries.push({ at, channel, command: info.command, id, ...chatMessage(line, info) });
+    }
+
+    flush(shard: number, write: (message: string, batch: object) => void): void {
+        const entries = this.#entries;
+        const dropped = this.#dropped;
+        this.#entries = [];
+        this.#dropped = 0;
+        for (let start = 0; start < entries.length; start += ChatLog.BATCH) {
+            write("chat", { shard, lines: entries.slice(start, start + ChatLog.BATCH) });
+        }
+        if (dropped > 0) write("chat lines not logged", { shard, dropped });
+    }
 }
 
 const DEFAULT_IRC_URL = "wss://irc-ws.chat.twitch.tv:443";
@@ -79,6 +117,7 @@ function count(raw: string | undefined, fallback: number, least: number): number
 export class ChatHub extends DurableObject<HubEnv> {
     protected readonly core: HubCore<WebSocket>;
     #shard: number | null;
+    #chat = new ChatLog();
 
     constructor(ctx: DurableObjectState, env: HubEnv) {
         super(ctx, env);
@@ -105,6 +144,7 @@ export class ChatHub extends DurableObject<HubEnv> {
                 reset: () => ctx.abort("hub reset itself"),
                 paused: (pause) => this.#paused(pause),
                 resumed: (reason) => this.#resumed(reason),
+                chat: (channel, line, info) => this.#chat.add(Date.now(), channel, line, info),
             },
             SYSTEM_RUNTIME,
         );
@@ -210,7 +250,11 @@ export class ChatHub extends DurableObject<HubEnv> {
     }
 
     async alarm(): Promise<void> {
-        await this.core.alarm();
+        try {
+            await this.core.alarm();
+        } finally {
+            this.#chat.flush(this.#shard ?? -1, (message, batch) => console.log(message, batch));
+        }
     }
 
     /** The row `hub-tick` of `analytics.ts`: the shard, then the counters in this order. */
@@ -232,8 +276,8 @@ export class ChatHub extends DurableObject<HubEnv> {
     }
 
     /**
-     * The row `hub-paused` of `analytics.ts`, and the one line the hub ever writes to the log.
-     * A reason, a shard and two counts: nothing that names a channel.
+     * The row `hub-paused` of `analytics.ts`, and a line in the log. A reason, a shard and two
+     * counts: nothing that names a channel.
      */
     #paused(pause: PauseStart): void {
         const shard = this.#shard ?? -1;
