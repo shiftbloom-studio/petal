@@ -160,9 +160,10 @@ describe("handleApi", () => {
 
     it("answers 503 when a hub fails, hangs or does not upgrade, and hands on its refusal", async (t) => {
         t.mock.method(console, "error", () => {});
+        t.mock.method(console, "warn", () => {});
         t.mock.timers.enable({ apis: ["setTimeout"] });
         const failures = [
-            () => Promise.reject(new Error("Durable Object is overloaded")),
+            () => Promise.reject(new Error("internal error; reference = 0123456789abcdef")),
             () => new Response("{}"),
             () => new Promise<Response>(() => {}),
         ];
@@ -170,10 +171,44 @@ describe("handleApi", () => {
             const response = call(fakeEnv({}, answer).env, CHANNEL);
             // The hub is asked after the rate limit was, which takes a turn of the event loop.
             await new Promise((resolve) => setImmediate(resolve));
+            // The wait before a hub that failed is asked once more.
+            t.mock.timers.tick(100);
+            await new Promise((resolve) => setImmediate(resolve));
             t.mock.timers.tick(HUB_TIMEOUT_MS);
             assert.deepEqual(await refusal(response), [503, "relay_unavailable"]);
         }
         const full = Response.json({ error: "hub_full" }, { status: 503 });
         assert.equal(await call(fakeEnv({}, () => full).env, CHANNEL), full);
+    });
+
+    it("asks a hub that failed once more, unless it is overloaded", async (t) => {
+        t.mock.method(console, "error", () => {});
+        t.mock.method(console, "warn", () => {});
+        t.mock.timers.enable({ apis: ["setTimeout"] });
+        const failing = (error: Error) => {
+            let asked = 0;
+            return () => (asked++ === 0 ? Promise.reject(error) : UPGRADED);
+        };
+        const settle = async () => {
+            await new Promise((resolve) => setImmediate(resolve));
+            t.mock.timers.tick(100);
+        };
+
+        const internal = new Error("internal error; reference = 0123456789abcdef");
+        const broken = fakeEnv({}, failing(internal));
+        const retried = call(broken.env, CHANNEL);
+        await settle();
+        assert.equal(await retried, UPGRADED);
+        // Through a new stub: the one that threw may stay broken.
+        assert.equal(broken.hubs.length, 2);
+
+        const overload = Object.assign(new Error("Durable Object is overloaded"), {
+            overloaded: true,
+        });
+        const busy = fakeEnv({}, failing(overload));
+        const refused = call(busy.env, CHANNEL);
+        await settle();
+        assert.deepEqual(await refusal(refused), [503, "relay_unavailable"]);
+        assert.equal(busy.hubs.length, 1);
     });
 });
