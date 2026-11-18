@@ -44,7 +44,7 @@ accounts or secrets are involved.
 - **Chat** arrives through Petal's own relay (`/api/irc`). A Durable Object, the hub, reads the
   channel from Twitch over an anonymous, read-only connection and passes every line on to the
   overlays of that channel. It keeps the last 50 lines per channel in memory, so an overlay that
-  joins late or reloads does not start empty. Chat is neither stored nor logged nor analysed. See
+  joins late or reloads does not start empty. The lines it relays are written to Workers Logs; chat is not analysed. See
   [The hub](#the-hub).
 - **Lists of emotes, badges and name paints** of 7TV, BetterTTV, FrankerFaceZ, FFZ:AP, Chatterino
   and IVR arrive through Petal's data gateway (`/api/data/`), which fetches them from the providers
@@ -216,6 +216,7 @@ src/
     hub.ts, relay/          Chat relay: the Durable Object and its logic
     gateway/                Data gateway: allowlist, cache policy, 7TV paints
     rate-limit.ts, analytics.ts    Rate limit per client address, counters for Analytics Engine
+    trace.ts                Attributes on the trace span of a request
     env.ts                  Bindings and variables of the Worker
 public/robots.txt           Only the start page may be indexed
 public/llms.txt, llms-full.txt, sitemap.xml    Written by scripts/seo.ts
@@ -626,8 +627,15 @@ which are only loaded with `homies=1`.
 
 Chat lines and the names of chat users exist in a hub's memory while they pass through, and in the
 replay buffer until 50 newer lines of the channel have pushed them out, moderation has removed them,
-or the channel was parted. They are never written to the storage of the Durable Object, to KV, to a
-log or to Analytics Engine, and they never appear in an error message or in `/api/status`.
+or the channel was parted. They are never written to the storage of the Durable Object, to KV or
+to Analytics Engine, and they never appear in an error message or in `/api/status`.
+
+A hub also writes every PRIVMSG and
+USERNOTICE it relays to Workers Logs (`ChatLog` in `src/worker/hub.ts`): the time, the channel, the
+login of the sender, the message id and the text. Lines wait in memory for the hub's alarm, at most
+30 seconds and 20,000 lines, and are written in batches of 50; what a hub holds when it leaves
+memory is not written. A message that moderation removes afterwards stays in the log until the log
+expires. Chat on an overlay's direct connection to Twitch never reaches the Worker.
 
 | Place                    | What it holds                                                          |
 | ------------------------ | ---------------------------------------------------------------------- |
@@ -636,7 +644,7 @@ log or to Analytics Engine, and they never appear in an error message or in `/ap
 | Overlay connection attachment | Channel, anonymous nick, phase of the handshake, time of acceptance |
 | KV                       | Answers of the providers: lists of emotes, badges and paints, under keys made of the route id and the id of a channel, an emote set or a paint |
 | Analytics Engine         | Counters: the event (`irc-connect`, `irc-refused`, `data`, `hub-tick`, `hub-paused`, `hub-resumed`), the reason of a refusal or a pause, the route id, cache status and layer, the status code, the shard number, per alarm of a hub, how many overlays, channels, connections to Twitch, relayed lines, accepted and refused connections and failed connections to Twitch it counted and, per pause, the count that exceeded a threshold and the threshold. No channel, no address, no name, no text |
-| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. Alarm invocations are logged by the platform as the scheduled time (`Date.toString()`); the hub's `alarm()` does not log. The code adds error messages, which name a path, a route id or a shard number and never the query; one JSON line `upstream_unavailable` per provider per minute with the provider, the route id and a reason (`timeout`, `network`, `status`, `response`, `abandoned`, `unknown`) and never a channel; and one line when a hub pauses itself, with the reason, the shard, a count and its threshold |
+| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. The code adds error messages, which name a path, a route id or a shard number and never the query, and one line when a hub pauses itself, with the reason, the shard, a count and its threshold. On the trace span of a sampled request the code sets the kind of request (`petal.route`), the error code of a refusal, the shard number and, for the gateway, the route id, cache status and layer (`src/worker/trace.ts`): the words the counters hold, no channel, no address, no name, no text. The chat a hub relays: time, channel, login, message id and text |
 | Rate limiter             | Counts of requests per client address and endpoint, over one minute, in the memory of Cloudflare's rate limiter |
 | `/api/status`            | Counts per hub, the pause of a hub and the version of the deployment   |
 | Browser, local storage   | The theme choice under `theme`, once the button in the header was used. Not on overlay pages |
