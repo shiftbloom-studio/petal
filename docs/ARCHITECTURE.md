@@ -216,6 +216,7 @@ src/
     hub.ts, relay/          Chat relay: the Durable Object and its logic
     gateway/                Data gateway: allowlist, cache policy, 7TV paints
     rate-limit.ts, analytics.ts    Rate limit per client address, counters for Analytics Engine
+    trace.ts                Attributes on the trace span of a request
     env.ts                  Bindings and variables of the Worker
 public/robots.txt           Only the start page may be indexed
 public/llms.txt, llms-full.txt, sitemap.xml    Written by scripts/seo.ts
@@ -630,7 +631,7 @@ log or to Analytics Engine, and they never appear in an error message or in `/ap
 | Overlay connection attachment | Channel, anonymous nick, phase of the handshake, time of acceptance |
 | KV                       | Answers of the providers: lists of emotes, badges and paints, under keys made of the route id and the id of a channel, an emote set or a paint |
 | Analytics Engine         | Counters: the event (`irc-connect`, `irc-refused`, `data`, `hub-tick`, `hub-paused`, `hub-resumed`), the reason of a refusal or a pause, the route id, cache status and layer, the status code, the shard number, per alarm of a hub, how many overlays, channels, connections to Twitch, relayed lines, accepted and refused connections and failed connections to Twitch it counted and, per pause, the count that exceeded a threshold and the threshold. No channel, no address, no name, no text |
-| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. The code adds error messages, which name a path, a route id or a shard number and never the query, and one line when a hub pauses itself, with the reason, the shard, a count and its threshold |
+| Workers Logs             | What Cloudflare writes per request and per hub event, kept 7 days: among it the URL, which names the channel in `/chat/<channel>` and `/api/irc?channel=` and carries the options of an overlay link, and the client address. The code adds error messages, which name a path, a route id or a shard number and never the query, and one line when a hub pauses itself, with the reason, the shard, a count and its threshold. On the trace span of a sampled request the code sets the kind of request (`petal.route`), the error code of a refusal, the shard number and, for the gateway, the route id, cache status and layer (`src/worker/trace.ts`): the words the counters hold, no channel, no address, no name, no text |
 | Rate limiter             | Counts of requests per client address and endpoint, over one minute, in the memory of Cloudflare's rate limiter |
 | `/api/status`            | Counts per hub, the pause of a hub and the version of the deployment   |
 | Browser, local storage   | The theme choice under `theme`, once the button in the header was used. Not on overlay pages |
