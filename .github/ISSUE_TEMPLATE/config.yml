@@ -4,8 +4,8 @@ contact_links:
     url: https://github.com/shiftbloom-studio/petal/discussions
     about: Ask how something works, or talk an idea through before it becomes a request.
   - name: Security problem
-    url: https://petal.shiftbloom.studio/imprint
-    about: Please report it by mail to the address in the imprint, not in a public issue.
+    url: https://github.com/shiftbloom-studio/petal/blob/main/SECURITY.md
+    about: Please email safety@shiftbloom.studio, not a public issue.
   - name: How to contribute
     url: https://github.com/shiftbloom-studio/petal/blob/main/docs/CONTRIBUTING.md
     about: Read this before you pick up an issue. Comment first, get assigned, then open a pull request.
