@@ -21,6 +21,8 @@ const HUB_LOCATION: DurableObjectLocationHint = "weur";
 
 /** An overlay gives the relay 15 seconds; answering sooner sends it to Twitch sooner. */
 export const HUB_TIMEOUT_MS = 5000;
+/** Before a hub that failed is asked once more; the runtime builds the object again meanwhile. */
+const HUB_RETRY_MS = 100;
 const STATUS_TIMEOUT_MS = 3000;
 
 const DATA_PREFIX = "/api/data/";
@@ -115,6 +117,32 @@ function hub(env: Env, shard: number): DurableObjectStub {
     return env.CHAT_HUB.get(id, { locationHint: HUB_LOCATION });
 }
 
+/** Set by the runtime on the error of a hub that has more requests than it can take. */
+function overloaded(error: unknown): boolean {
+    return (
+        typeof error === "object" && error !== null && "overloaded" in error && !!error.overloaded
+    );
+}
+
+/**
+ * Hands the connection to the hub. The runtime now and then fails a request to an object that
+ * is fine, with `internal error; reference = ...`: while the object is reset or moved, or when
+ * its storage does not confirm a write. The object is built again by the next request, so the
+ * hub is asked once more, through a new stub, since one that threw may stay broken. An
+ * overloaded hub is not: more requests are what it cannot take. A socket the first attempt
+ * left behind in the hub never sends its JOIN and is closed for that.
+ */
+async function upgrade(request: Request, env: Env, shard: number): Promise<Response> {
+    try {
+        return await hub(env, shard).fetch(request);
+    } catch (error) {
+        if (overloaded(error)) throw error;
+        console.warn("hub failed, asking once more", shard, error);
+        await new Promise((resolve) => setTimeout(resolve, HUB_RETRY_MS));
+        return await hub(env, shard).fetch(request);
+    }
+}
+
 /**
  * Sockets are not subject to the same-origin policy, so any website could make its visitors'
  * browsers use this relay. Programs other than browsers send no origin, and a page in a
@@ -168,7 +196,7 @@ async function chat(request: Request, env: Env, url: URL): Promise<Response> {
     annotate({ "petal.shard": shard });
     let response: Response;
     try {
-        response = await within(HUB_TIMEOUT_MS, hub(env, shard).fetch(request));
+        response = await within(HUB_TIMEOUT_MS, upgrade(request, env, shard));
     } catch (error) {
         logPlatformError(new PlatformError(PlatformEvent.HubUnavailable, error, { shard }));
         return relayUnavailable(env, shard);

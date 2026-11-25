@@ -302,6 +302,12 @@ For the last three checks the Worker passes the original request to the hub of t
 the hub's answer, which carries the overlay's end of the connection. From there on the Worker is no
 longer involved: the overlay talks to the hub.
 
+A request to a hub can fail although the hub is fine: Cloudflare answers it with
+`internal error; reference = ...` while the object is reset or moved, or when its storage does not
+confirm a write. The Worker asks a hub that failed once more after 100 milliseconds, within the same
+5 seconds, and answers 503 `relay_unavailable` only when that fails as well. A hub that reports
+itself overloaded is not asked again.
+
 ## The hub
 
 `ChatHub` in `src/worker/hub.ts` is a Durable Object. It owns what only the Workers runtime has: the
@@ -680,6 +686,7 @@ per alarm of a hub and one each when a hub pauses itself and when the pause is o
 | Time for an overlay to send its JOIN          | 30 seconds                     | `relay/core.ts`                 |
 | Silence after which an overlay connection is closed | 10 minutes               | `relay/core.ts`                 |
 | Wait for a hub to take a connection           | 5 seconds                      | `api.ts`                        |
+| Attempts to hand a connection to a hub        | 2, 100 milliseconds apart; 1 when the hub is overloaded | `api.ts` |
 | Wait for a hub to report its status           | 3 seconds                      | `api.ts`                        |
 | Chat connections, gateway requests and status requests per client address | 300 per minute each | `wrangler.jsonc`, `RATE_LIMIT` |
 | Gateway requests per client address with nothing stored, which ask a provider | 60 per minute | `wrangler.jsonc`, `RATE_LIMIT_MISS` |
