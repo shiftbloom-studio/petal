@@ -56,12 +56,12 @@ export const site = {
     overlayPath: "/chat/",
     language: "en",
     /** At most 60 characters, or search results cut it off. */
-    title: "Petal — free Twitch chat overlay for OBS: 7TV, BTTV, FFZ",
+    title: "Petal - free Twitch chat overlay for OBS: 7TV, BTTV, FFZ",
     /** Between 110 and 160 characters, for the same reason. */
     description:
         "Petal is a free, open-source Twitch chat overlay for OBS. Type your channel, copy the link, add a browser source. 7TV, BTTV and FFZ emotes, no login.",
     /** The line under a shared link. */
-    socialTitle: "Petal — put your Twitch chat on screen",
+    socialTitle: "Petal - put your Twitch chat on screen",
     socialDescription:
         "A free, open-source Twitch chat overlay for OBS, with 7TV, BTTV and FFZ emotes, badges and name paints. No account, no login.",
     summary:

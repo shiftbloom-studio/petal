@@ -36,7 +36,7 @@ export default function LegalPage(props: LegalPageProps) {
             <Meta name="robots" content="noindex" />
             {/* A link to the page still gets its preview where somebody shares it. */}
             <SocialTags
-                title={`${props.title} — ${site.name}`}
+                title={`${props.title} - ${site.name}`}
                 description={
                     de()
                         ? `${props.title} von Petal, einem kostenlosen Twitch-Chat-Overlay für OBS von shiftbloom studio.`
@@ -50,7 +50,7 @@ export default function LegalPage(props: LegalPageProps) {
             <Container component="main">
                 <article class={styles.page} lang={props.lang}>
                     <Typography variant="overline" component="p" color="text.secondary">
-                        {de() ? "Petal — Rechtliches" : "Petal — legal"}
+                        {de() ? "Petal - Rechtliches" : "Petal - legal"}
                     </Typography>
                     <Typography variant="h2" component="h1" class={styles.title}>
                         {props.title}

@@ -66,7 +66,7 @@ export default function SiteFooter(props: { lang?: "en" | "de" }) {
                             )}
                         </For>
                     </nav>
-                    <span>petal.shiftbloom.studio — 53.55°N 9.99°E</span>
+                    <span>petal.shiftbloom.studio - 53.55°N 9.99°E</span>
                 </div>
             </div>
         </Container>
