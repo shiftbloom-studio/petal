@@ -20,7 +20,7 @@ const MAX_SHARDS = 64;
 const HUB_LOCATION: DurableObjectLocationHint = "weur";
 
 /** An overlay gives the relay 15 seconds; answering sooner sends it to Twitch sooner. */
-const HUB_TIMEOUT_MS = 5000;
+export const HUB_TIMEOUT_MS = 5000;
 /** Before a hub that failed is asked once more; the runtime builds the object again meanwhile. */
 const HUB_RETRY_MS = 100;
 const STATUS_TIMEOUT_MS = 3000;
