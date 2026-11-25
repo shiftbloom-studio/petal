@@ -93,7 +93,7 @@ export const site = {
 export const studio = {
     name: "shiftbloom studio",
     url: "https://shiftbloom.studio",
-    email: "hello@shiftbloom.studio",
+    email: "hi@shiftbloom.studio",
     description: "An open digital studio in Hamburg.",
     profiles: [
         "https://github.com/shiftbloom-studio",
