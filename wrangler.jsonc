@@ -93,7 +93,7 @@
   // million. Logs stay at 100%: head sampling drops a request's errors along with everything
   // else. Traces are only needed statistically (latency), so 10% is enough.
   "observability": {
-    "enabled": false,
+    "enabled": true,
     "head_sampling_rate": 1,
     "redact_query_string": false,
     "logs": {
