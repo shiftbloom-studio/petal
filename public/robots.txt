@@ -3,7 +3,9 @@
 # Only the start page is meant to be found. Chat pages show the messages of a channel, and
 # crawlers that ignore this file are refused there. The rules are the same for search engines
 # and for the crawlers of language models, which are welcome on the start page too.
+# Content-Signal (https://contentsignals.org): search and AI answers yes, AI training no.
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 Allow: /$
 # Petal in plain text, for language models (https://llmstxt.org).
 Allow: /llms.txt
@@ -18,6 +20,21 @@ Allow: /og-square.png
 Allow: /bloom.svg
 Allow: /favicon.ico
 Allow: /apple-touch-icon.png
+Disallow: /
+
+# Crawlers that only collect training data for AI models. They are also blocked at the edge.
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: anthropic-ai
+User-agent: CCBot
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: Bytespider
+User-agent: Amazonbot
+User-agent: meta-externalagent
+User-agent: cohere-ai
+User-agent: MistralAI-Training
+User-agent: Diffbot
 Disallow: /
 
 Sitemap: https://petal.shiftbloom.studio/sitemap.xml
