@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { V4_PAINT_FIELDS as CLIENT_PAINT_FIELDS } from "../../../src/lib/chat/providers/seventv/paint";
-import { DataGateway, type EntryMetadata, type KVLike } from "../../../src/worker/gateway/gateway";
+import {
+    type CacheLike,
+    DataGateway,
+    type EntryMetadata,
+    type KVLike,
+} from "../../../src/worker/gateway/gateway";
 import * as paints from "../../../src/worker/gateway/paints";
 
 const TWITCH_USER_ID = "50985620";
@@ -14,6 +19,8 @@ const GLOBAL = "/bttv/3/cached/emotes/global";
 const USER = `/bttv/3/cached/users/twitch/${TWITCH_USER_ID}`;
 const FFZ_ROOM = `/ffz/v1/room/id/${TWITCH_USER_ID}`;
 const FFZ_GLOBAL = "/ffz/v1/set/global";
+const IVR_BADGES_URL = `https://api.ivr.fi/v2/twitch/badges/channel?id=${TWITCH_USER_ID}`;
+const IVR_BADGES = `/ivr/v2/twitch/badges/channel?id=${TWITCH_USER_ID}`;
 const START = Date.UTC(2026, 8, 29, 12);
 const LOG_INTERVAL_SECONDS = 60;
 const SECONDS_PER_DAY = 86_400;
@@ -64,6 +71,20 @@ function setup() {
         return answer(body);
     };
     const json = (url: string, body: unknown) => answers.set(url, () => Response.json(body));
+    /** Stands in for the location's cache, shared by all isolates of a test. */
+    const cached = new Map<string, { body: string; at: number }>();
+    const cache: CacheLike = {
+        async match(url) {
+            const entry = cached.get(url);
+            return entry && entry.at > ms ? new Response(entry.body) : undefined;
+        },
+        async put(url, response) {
+            const maxAge = Number(
+                /max-age=(\d+)/.exec(response.headers.get("cache-control") ?? "")?.[1],
+            );
+            cached.set(url, { body: await response.text(), at: ms + maxAge * 1000 });
+        },
+    };
     const work: Promise<unknown>[] = [];
     const settle = async () => {
         while (work.length > 0) await Promise.allSettled(work.splice(0));
@@ -76,11 +97,12 @@ function setup() {
     const get = (path: string, on = gateway, init?: RequestInit) => {
         const url = new URL(`https://chat.example/api/data${path}`);
         const admit = async () => misses.allowed-- > 0;
-        const context = { kv, admit, waitUntil: (job: Promise<unknown>) => void work.push(job) };
+        const waitUntil = (job: Promise<unknown>) => void work.push(job);
+        const context = { kv, cache, admit, waitUntil };
         return on.handle(new Request(url, init), url.pathname.slice(9), context);
     };
     const post = (body: string) => get("/7tv/v4/gql", undefined, { method: "POST", body });
-    return { advance, stored, answers, calls, json, settle, isolate, get, post, misses };
+    return { advance, stored, cached, answers, calls, json, settle, isolate, get, post, misses };
 }
 
 const cacheOf = (response: Response) => response.headers.get("x-petal-cache");
@@ -92,8 +114,8 @@ describe("cache", () => {
         const first = await get(USER);
         assert.equal(cacheOf(first), "MISS; layer=upstream");
         await settle();
-        // Two minutes fresh, a week stale.
-        assert.equal(stored.get("d1:bttv.user:50985620")?.at, START + 604920 * 1000);
+        // Five minutes fresh, a week stale.
+        assert.equal(stored.get("d1:bttv.user:50985620")?.at, START + 605100 * 1000);
         assert.equal(cacheOf(await get(USER)), "HIT; layer=memory");
 
         advance(90);
@@ -104,8 +126,11 @@ describe("cache", () => {
 
     it("asks again for a channel's old data, and refreshes a shared list behind it", async () => {
         const cases: [string, string, number, string, string][] = [
-            [USER, BTTV_USER, 121, "EXPIRED; layer=upstream", "new"],
+            [IVR_BADGES, IVR_BADGES_URL, 601, "EXPIRED; layer=upstream", "new"],
             [GLOBAL, BTTV_GLOBAL, 601, "UPDATING; layer=memory", "old"],
+            // Channel data that the provider pushes live is refreshed behind as well.
+            [USER, BTTV_USER, 301, "UPDATING; layer=memory", "old"],
+            [FFZ_ROOM, FFZ_ROOM_URL, 301, "UPDATING; layer=memory", "old"],
         ];
         for (const [path, url, seconds, cache, served] of cases) {
             const { advance, json, settle, get } = setup();
@@ -144,7 +169,7 @@ describe("provider failures", () => {
             assert.deepEqual(await stale.json(), [{ id: "kept" }]);
             await stored.settle();
             // The failure must not overwrite, or prolong, what is stored.
-            assert.equal(stored.stored.get("d1:bttv.user:50985620")?.at, START + 604920 * 1000);
+            assert.equal(stored.stored.get("d1:bttv.user:50985620")?.at, START + 605100 * 1000);
 
             const empty = setup();
             empty.answers.set(BTTV_USER, answer);
@@ -205,6 +230,43 @@ describe("provider failures", () => {
         assert.equal(again.status, 200);
         assert.equal(cacheOf(again), "STALE; layer=memory");
         assert.equal(calls.length, 2);
+    });
+
+    it("trusts a 404 of a channel's FFZ room for half an hour", async (t) => {
+        t.mock.method(console, "warn", () => {});
+        const { advance, answers, calls, get, settle } = setup();
+        answers.set(FFZ_ROOM_URL, () => new Response("missing", { status: 404 }));
+        await get(FFZ_ROOM);
+        await settle();
+        advance(29 * 60);
+        assert.equal(cacheOf(await get(FFZ_ROOM)), "HIT; layer=memory");
+        advance(2 * 60);
+        assert.equal(cacheOf(await get(FFZ_ROOM)), "EXPIRED; layer=upstream");
+        assert.equal(calls.length, 2);
+    });
+
+    it("leaves a provider alone in every isolate of the location after a 429", async (t) => {
+        const warned = t.mock.method(console, "warn", () => {});
+        const { answers, cached, calls, get, isolate, settle } = setup();
+        answers.set(
+            FFZ_ROOM_URL,
+            () => new Response(null, { status: 429, headers: { "retry-after": "30" } }),
+        );
+        assert.equal((await get(FFZ_ROOM)).status, 502);
+        await settle();
+        assert.equal(calls.length, 1);
+        assert.deepEqual([...cached.keys()], ["https://chat.example/__petal/gateway-backoff/ffz"]);
+
+        // Another isolate has heard nothing of it, but must not ask FFZ either, for any route.
+        const other = isolate();
+        const refused = await get(FFZ_GLOBAL, other);
+        assert.equal(refused.status, 502);
+        assert.ok(Number(refused.headers.get("retry-after")) >= 22);
+        assert.equal((await get(FFZ_GLOBAL, other)).status, 503);
+        await settle();
+        assert.equal(calls.length, 1);
+        // Only the isolate that was refused logs it.
+        assert.equal(warned.mock.calls.length, 1);
     });
 
     it("does not spend a miss on a retry while the provider is left alone", async () => {
