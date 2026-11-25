@@ -51,6 +51,8 @@ export async function handleData(
     gateway ??= new DataGateway({ userAgent: USER_AGENT });
     return gateway.handle(request, url.pathname.slice(DATA_PREFIX.length), {
         kv: env.CACHE,
+        // Absent outside the Workers runtime, such as in the dev server.
+        cache: typeof caches === "undefined" ? undefined : caches.default,
         waitUntil: (work) => context.waitUntil(work),
         admit: () => withinLimit(env.RATE_LIMIT_MISS, "miss", request),
         onEvent: report,

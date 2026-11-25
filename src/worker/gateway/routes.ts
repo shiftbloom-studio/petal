@@ -10,7 +10,8 @@ export interface CachePolicy {
     fresh: number;
     /**
      * Window after `fresh` in which the stored answer is served at once and refreshed in the
-     * background. Zero for channel data: an overlay reload must show emotes added a minute ago.
+     * background. Zero for channel data without live updates: an overlay reload must show
+     * emotes added a minute ago.
      */
     staleWhileRevalidate: number;
     /** Window after `fresh` in which the stored answer is served when the provider fails. */
@@ -60,6 +61,21 @@ const sharedList = (fresh: number, maxBytes: number): CachePolicy => ({
     fresh,
     staleWhileRevalidate: Math.max(HOUR, 4 * fresh),
     staleIfError: 7 * DAY,
+    maxBytes,
+});
+
+/**
+ * Data of one channel whose provider pushes every edit to the overlays live, over FFZ's pubsub
+ * or BTTV's socket. A running overlay never depends on a refetch, so a stored answer is served
+ * at once for an hour after it is fresh and refreshed behind. A reload right after an edit may
+ * show the stored answer once; it starts the refresh, and the reload after it sees the edit.
+ * Channels without an account here are many and rarely open one, so a 404 is trusted longer.
+ */
+const liveChannelData = (fresh: number, maxBytes: number): CachePolicy => ({
+    fresh,
+    staleWhileRevalidate: HOUR,
+    staleIfError: 7 * DAY,
+    negativeFresh: 30 * MINUTE,
     maxBytes,
 });
 
@@ -230,7 +246,7 @@ export const GATEWAY_ROUTES: readonly GatewayRoute[] = [
         method: "GET",
         path: new RegExp(`^/bttv/3/cached/users/twitch/(?<twitchId>${TWITCH_ID})$`),
         upstream: ({ twitchId }) => `https://api.betterttv.net/3/cached/users/twitch/${twitchId}`,
-        policy: channelData(2 * MINUTE, 2 * MINUTE, 2 * MIB),
+        policy: liveChannelData(5 * MINUTE, 2 * MIB),
     },
     {
         id: "bttv.badges",
@@ -254,7 +270,9 @@ export const GATEWAY_ROUTES: readonly GatewayRoute[] = [
         method: "GET",
         path: new RegExp(`^/ffz/v1/room/id/(?<twitchId>${TWITCH_ID})$`),
         upstream: ({ twitchId }) => `https://api.frankerfacez.com/v1/room/id/${twitchId}`,
-        policy: channelData(2 * MINUTE, 2 * MINUTE, 2 * MIB),
+        // Asked by every overlay on load and again whenever FFZ's pubsub reconnects, which
+        // happens to all overlays at once: the route FFZ rate-limits first.
+        policy: liveChannelData(5 * MINUTE, 2 * MIB),
     },
     {
         id: "ffz.badges",
