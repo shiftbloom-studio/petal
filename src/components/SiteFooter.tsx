@@ -8,7 +8,7 @@ const links = [
     { label: "Source on GitHub", href: "https://github.com/shiftbloom-studio/petal" },
     { label: "shiftbloom.studio", href: "https://shiftbloom.studio" },
     { label: "Open Collective", href: "https://opencollective.com/shiftbloom-studio" },
-    { label: "hello@shiftbloom.studio", href: "mailto:hello@shiftbloom.studio" },
+    { label: "hi@shiftbloom.studio", href: "mailto:hi@shiftbloom.studio" },
 ];
 
 // On every page, as § 5 DDG requires of the imprint. German pages link the German versions.

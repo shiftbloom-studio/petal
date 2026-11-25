@@ -68,10 +68,12 @@ Open the existing **Workers & Pages > petal > Settings > Build** and connect `sh
 | Build variable `PNPM_VERSION` | `12.8.1` |
 | Build variable `SKIP_DEPENDENCY_INSTALL` | `1` |
 | Build variable `WRANGLER_SEND_METRICS` | `false` |
+| Build variables `VITE_OPERATOR_NAME`, `VITE_OPERATOR_BUSINESS`, `VITE_OPERATOR_STREET`, `VITE_OPERATOR_CITY`, `VITE_OPERATOR_EMAIL` | The operator named in the imprint and privacy policy |
+| Optional build variables `VITE_OPERATOR_PHONE`, `VITE_OPERATOR_VAT_ID` | Shown on the imprint when set |
 
 Choose the deployment API token in Cloudflare's build settings. The GitHub Actions secret `CLOUDFLARE_API_TOKEN` and variable `CLOUDFLARE_ACCOUNT_ID` are no longer used by this repository. Existing domains, bindings and migrations stay with the Worker `petal`.
 
-The build command installs the frozen lockfile, runs type checks, `biome ci`, tests and the production build. A failed step stops deployment. Nitro writes `.output/server/wrangler.json` and Wrangler's configuration redirect, so the deploy command runs from the repository root.
+The build command installs the frozen lockfile, runs type checks, `biome ci`, tests and the production build. A failed step stops deployment, and so does a missing operator variable: the imprint details are read at build time (see `.env.example`), so the repository holds no personal data. Nitro writes `.output/server/wrangler.json` and Wrangler's configuration redirect, so the deploy command runs from the repository root.
 
 Node.js comes from `.node-version`. Keep `PNPM_VERSION` in Cloudflare aligned with `packageManager` in `package.json` and the lockfile after pnpm upgrades. Automatic dependency installation is skipped because `build:cloudflare` performs it explicitly.
 

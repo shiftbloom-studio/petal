@@ -528,10 +528,10 @@ not a proxy for arbitrary URLs.
 | `7tv.user`           | `/7tv/v3/users/twitch/<user id>`        | 1 min  | —      | 7 days | 2 min  | 8 MiB  |
 | `7tv.paints`         | `/7tv/v4/gql` (POST)                    | 5 s    | —      | 30 days | 5 min | 1 MiB  |
 | `bttv.global`        | `/bttv/3/cached/emotes/global`          | 10 min | 1 h    | 7 days | —      | 1 MiB  |
-| `bttv.user`          | `/bttv/3/cached/users/twitch/<user id>` | 2 min  | —      | 7 days | 2 min  | 2 MiB  |
+| `bttv.user`          | `/bttv/3/cached/users/twitch/<user id>` | 5 min  | 1 h    | 7 days | 30 min | 2 MiB  |
 | `bttv.badges`        | `/bttv/3/cached/badges/twitch`          | 15 min | 1 h    | 7 days | —      | 1 MiB  |
 | `ffz.global`         | `/ffz/v1/set/global`                    | 10 min | 1 h    | 7 days | —      | 1 MiB  |
-| `ffz.room`           | `/ffz/v1/room/id/<user id>`             | 2 min  | —      | 7 days | 2 min  | 2 MiB  |
+| `ffz.room`           | `/ffz/v1/room/id/<user id>`             | 5 min  | 1 h    | 7 days | 30 min | 2 MiB  |
 | `ffz.badges`         | `/ffz/v1/badges/ids`                    | 15 min | 1 h    | 7 days | —      | 4 MiB  |
 | `ffzap.supporters`   | `/ffzap/v1/supporters`                  | 30 min | 2 h    | 7 days | —      | 1 MiB  |
 | `chatterino.badges`  | `/chatterino/badges`                    | 1 h    | 4 h    | 7 days | —      | 1 MiB  |
@@ -541,8 +541,10 @@ not a proxy for arbitrary URLs.
 
 The three windows follow each other. While an answer is fresh it is served without asking the
 provider. In the window after that, lists that every overlay shares are served at once and refreshed
-in the background. Channel data has no such window: a reload of the overlay must show an emote that
-was added a minute ago. In the last window the stored answer is only served when the provider fails.
+in the background. So is the channel data of BTTV and FFZ, which push every edit to running overlays
+over their sockets: a reload right after an edit may show the stored answer once, and the reload
+after it shows the edit. Other channel data has no such window: a reload of the overlay must show an
+emote that was added a minute ago. In the last window the stored answer is only served when the provider fails.
 A copy still held after that window is served the same way when the provider fails, instead of a 502.
 
 A 404 of a provider means that the channel has no account there. It is stored for the time in the
@@ -581,7 +583,10 @@ pass a rush of overlays on to a provider:
   one's fetch gives up after 7 seconds.
 - After a failure the key is left alone for 5 seconds, doubling up to 5 minutes, times 0.75 to 1.25.
   After a 429 the whole provider is left alone in the same way, for the backoff or the provider's
-  `retry-after`, whichever is longer, up to the same 5 minutes.
+  `retry-after`, whichever is longer, up to the same 5 minutes. The isolate that got the 429 notes
+  it in the location's cache (Cache API, under `/__petal/gateway-backoff/<provider>` of the
+  request's origin), and every other isolate there checks that note before it asks the provider,
+  so a location backs off as one instead of each isolate collecting its own 429.
   Meanwhile stored answers are served as `STALE`, and requests without one get `upstream_backoff`.
 - A client address may cause 60 requests per minute for which nothing is stored yet and a provider
   has to be asked, against

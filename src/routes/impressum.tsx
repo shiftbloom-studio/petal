@@ -11,9 +11,14 @@ export default function Impressum() {
             <OperatorAddress lang="de" />
             <p>
                 E-Mail: <a href={`mailto:${operator.email}`}>{operator.email}</a>
-                <br />
-                Telefon:{" "}
-                <a href={`tel:${operator.phone.replace(/[^\d+]/g, "")}`}>{operator.phone}</a>
+                <Show when={operator.phone}>
+                    {(phone) => (
+                        <>
+                            <br />
+                            Telefon: <a href={`tel:${phone().replace(/[^\d+]/g, "")}`}>{phone()}</a>
+                        </>
+                    )}
+                </Show>
             </p>
             <Show when={operator.vatId}>
                 {(vatId) => <p>Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: {vatId()}</p>}

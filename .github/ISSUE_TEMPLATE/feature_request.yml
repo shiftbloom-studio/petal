@@ -13,3 +13,10 @@ body:
     attributes:
       label: What would you use it for?
       description: The stream setup or situation this is for. If ChatIS or another overlay has it, say so.
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      description: Comment with your approach and wait to be assigned before you start, see CONTRIBUTING.md.
+      options:
+        - label: I'd like to work on this myself

@@ -21,6 +21,15 @@ export interface KVLike {
     ): Promise<void>;
 }
 
+/**
+ * The part of the Cache API the gateway uses (`caches.default` in the Worker): the location's
+ * cache, shared by every isolate there.
+ */
+export interface CacheLike {
+    match(url: string): Promise<Response | undefined>;
+    put(url: string, response: Response): Promise<void>;
+}
+
 /** Stored as KV metadata, so one read returns the body together with its age. */
 export interface EntryMetadata {
     /** Stored at, in seconds since the epoch. */
@@ -68,6 +77,11 @@ export interface GatewayOptions {
 /** What differs per request: bindings may be missing, and background work belongs to a request. */
 export interface RequestContext {
     kv?: KVLike;
+    /**
+     * Where a 429 of a provider is noted, so that the other isolates of the location leave the
+     * provider alone too instead of each finding out by itself.
+     */
+    cache?: CacheLike;
     waitUntil: (work: Promise<unknown>) => void;
     /**
      * Asked before the provider is asked for something of which nothing is stored, at most
@@ -78,6 +92,13 @@ export interface RequestContext {
     admit?: () => Promise<boolean>;
     /** Called once per request, with what became of it. */
     onEvent?: (event: GatewayEvent) => void;
+}
+
+/** A request's context as the gateway passes it on, with the origin the request was sent to. */
+interface ScopedContext extends RequestContext {
+    origin: string;
+    /** Backoff notes read during this request, by provider: until when, or undefined for none. */
+    notes: Map<string, Promise<number | undefined>>;
 }
 
 interface Entry {
@@ -126,6 +147,11 @@ const MEMORY_ENTRY_MAX = 1024 * 1024;
 const PAINTS_BODY_MAX = 32 * 1024;
 const LOG_INTERVAL_MS = 60_000;
 const HTTP_TOO_MANY_REQUESTS = 429;
+/**
+ * Path of the location-wide backoff notes under the request's own origin. Nothing is served
+ * from it: the Worker answers every request of its hostnames before the cache does.
+ */
+const BACKOFF_NOTE_PATH = "/__petal/gateway-backoff/";
 
 const UpstreamReason = {
     Timeout: "timeout",
@@ -133,6 +159,8 @@ const UpstreamReason = {
     Status: "status",
     Response: "response",
     Abandoned: "abandoned",
+    /** Another isolate of the location was rate-limited and noted it; nothing was sent. */
+    Backoff: "backoff",
     Unknown: "unknown",
 } as const;
 
@@ -164,6 +192,7 @@ export const rateLimited = () => new GatewayError(429, "rate_limited", 60);
 interface UpstreamFailureOptions {
     status?: number;
     retryAfterMs?: number;
+    rateLimited?: boolean;
 }
 
 class UpstreamFailure extends Error {
@@ -176,7 +205,7 @@ class UpstreamFailure extends Error {
         super(reason);
         this.reason = reason;
         this.status = options.status;
-        this.rateLimited = options.status === HTTP_TOO_MANY_REQUESTS;
+        this.rateLimited = options.rateLimited ?? options.status === HTTP_TOO_MANY_REQUESTS;
         this.retryAfterMs = options.retryAfterMs;
     }
 }
@@ -318,9 +347,11 @@ export class DataGateway {
         const route = match.route.id;
         const { admit } = context;
         let admission: Promise<boolean> | undefined;
-        const scoped: RequestContext = {
+        const scoped: ScopedContext = {
             ...context,
             admit: admit && (() => (admission ??= admit())),
+            origin: new URL(request.url).origin,
+            notes: new Map(),
         };
         try {
             const { body, status, cache, layer, storedAt } =
@@ -358,7 +389,7 @@ export class DataGateway {
         return new GatewayError(500, "gateway_failure");
     }
 
-    async #resource(match: RouteMatch, context: RequestContext) {
+    async #resource(match: RouteMatch, context: ScopedContext) {
         const { route } = match;
         const key = KEY_PREFIX + match.key;
         const peeked = await this.#peek(key, route.policy, context);
@@ -369,7 +400,7 @@ export class DataGateway {
     }
 
     /** The newest stored answer, from memory or KV, however old it is. */
-    async #peek(key: string, policy: CachePolicy, context: RequestContext): Promise<Peeked> {
+    async #peek(key: string, policy: CachePolicy, context: ScopedContext): Promise<Peeked> {
         const remembered = this.#recall(key);
         if (remembered && this.#age(remembered) < freshFor(remembered, policy)) {
             return { entry: remembered, layer: "memory" };
@@ -390,7 +421,7 @@ export class DataGateway {
     async #settle(
         key: string,
         route: GatewayRoute,
-        context: RequestContext,
+        context: ScopedContext,
         { entry, layer }: Peeked,
         load: (timeoutMs: number) => Promise<Loaded>,
     ): Promise<Resolved> {
@@ -415,7 +446,7 @@ export class DataGateway {
     async #loadMiss(
         key: string,
         route: GatewayRoute,
-        context: RequestContext,
+        context: ScopedContext,
         refresh: (timeoutMs: number) => Promise<Entry>,
         blockedMs: number,
     ): Promise<Resolved> {
@@ -515,7 +546,7 @@ export class DataGateway {
     #refresh(
         key: string,
         route: GatewayRoute,
-        context: RequestContext,
+        context: ScopedContext,
         load: () => Promise<Loaded>,
     ): Promise<Entry> {
         const running = this.#running(key);
@@ -523,14 +554,20 @@ export class DataGateway {
         const startedAt = this.#now();
         const work = (async () => {
             try {
+                await this.#checkNote(route, context);
                 const entry: Entry = { ...(await load()), storedAt: this.#now() };
                 this.#backoff.delete(key);
                 this.#backoff.delete(route.provider);
                 this.#store(key, entry, route.policy, context);
                 return entry;
             } catch (error) {
-                this.#failed(key, route, error);
-                this.#logUpstream(route, error);
+                this.#failed(key, route, error, context);
+                // Noted by the isolate that was refused, which has logged it.
+                if (
+                    !(error instanceof UpstreamFailure && error.reason === UpstreamReason.Backoff)
+                ) {
+                    this.#logUpstream(route, error);
+                }
                 throw error;
             } finally {
                 // Unless given up and replaced in the meantime.
@@ -558,20 +595,77 @@ export class DataGateway {
         return undefined;
     }
 
-    #failed(key: string, route: GatewayRoute, error: unknown): void {
+    #failed(key: string, route: GatewayRoute, error: unknown, context: ScopedContext): void {
         const failure = error instanceof UpstreamFailure ? error : undefined;
         const scope = failure?.rateLimited ? route.provider : key;
         const previous = this.#backoff.get(scope)?.delay ?? 0;
+        if (failure?.reason === UpstreamReason.Backoff && failure.retryAfterMs !== undefined) {
+            // Taken over as noted: the isolate that was refused has already backed off.
+            const until = this.#now() + failure.retryAfterMs;
+            this.#backoff.set(scope, { until, delay: previous || failure.retryAfterMs });
+            return;
+        }
         const doubled = previous === 0 ? BACKOFF_FIRST_MS : previous * 2;
         const delay = Math.min(BACKOFF_MAX_MS, Math.max(doubled, failure?.retryAfterMs ?? 0));
         // Jitter, so isolates that failed together do not come back together.
         const until = this.#now() + delay * (0.75 + Math.random() / 2);
         this.#backoff.set(scope, { until, delay });
+        if (failure?.rateLimited && failure.reason === UpstreamReason.Status) {
+            this.#note(route, until, context);
+        }
         if (this.#backoff.size > BACKOFF_ENTRIES) {
             for (const [stale, pause] of this.#backoff) {
                 if (pause.until < this.#now()) this.#backoff.delete(stale);
             }
         }
+    }
+
+    #noteUrl(route: GatewayRoute, context: ScopedContext): string {
+        return `${context.origin}${BACKOFF_NOTE_PATH}${route.provider}`;
+    }
+
+    /**
+     * Tells the other isolates of the location that the provider rate-limited Petal, and until
+     * when to leave it alone. Like KV, the cache never fails a request.
+     */
+    #note(route: GatewayRoute, until: number, context: ScopedContext): void {
+        if (!context.cache) return;
+        const seconds = Math.max(1, Math.ceil((until - this.#now()) / 1000));
+        const note = new Response(String(Math.round(until)), {
+            headers: { "cache-control": `max-age=${seconds}`, "content-type": "text/plain" },
+        });
+        try {
+            context.waitUntil(
+                context.cache.put(this.#noteUrl(route, context), note).catch(() => {}),
+            );
+        } catch {
+            // A binding that throws instead of rejecting must not fail the request either.
+        }
+    }
+
+    /** Throws instead of asking a provider that another isolate of the location was refused by. */
+    async #checkNote(route: GatewayRoute, context: ScopedContext): Promise<void> {
+        const { cache, notes } = context;
+        if (!cache) return;
+        // Read once per request and provider: the paints of one request must reach their
+        // batch in the same tick, so they all wait for the same read.
+        let read = notes.get(route.provider);
+        if (!read) {
+            read = (async () => {
+                try {
+                    const note = await cache.match(this.#noteUrl(route, context));
+                    return note ? Number(await note.text()) : undefined;
+                } catch {
+                    return undefined;
+                }
+            })();
+            notes.set(route.provider, read);
+        }
+        const until = await read;
+        if (until === undefined) return;
+        const retryAfterMs = until - this.#now();
+        if (!Number.isFinite(retryAfterMs) || retryAfterMs <= 0) return;
+        throw new UpstreamFailure(UpstreamReason.Backoff, { rateLimited: true, retryAfterMs });
     }
 
     /** Milliseconds for which the provider must not be asked for this key. */
@@ -678,7 +772,7 @@ export class DataGateway {
     }
 
     /** KV trouble never fails a request: the gateway then works from memory and the provider. */
-    async #read(key: string, context: RequestContext): Promise<Entry | undefined> {
+    async #read(key: string, context: ScopedContext): Promise<Entry | undefined> {
         if (!context.kv) return undefined;
         try {
             const { value, metadata } = await context.kv.getWithMetadata(key, {
@@ -693,7 +787,7 @@ export class DataGateway {
         }
     }
 
-    #store(key: string, entry: Entry, policy: CachePolicy, context: RequestContext): void {
+    #store(key: string, entry: Entry, policy: CachePolicy, context: ScopedContext): void {
         this.#remember(key, entry);
         if (!context.kv) return;
         const lifetime = freshFor(entry, policy) + staleIfErrorFor(entry, policy);
@@ -718,7 +812,7 @@ export class DataGateway {
      * endpoint cannot run any other GraphQL. Paints are stored one by one, because every
      * overlay asks for a different combination of them.
      */
-    async #paints(request: Request, route: GatewayRoute, context: RequestContext) {
+    async #paints(request: Request, route: GatewayRoute, context: ScopedContext) {
         let text: string | undefined;
         try {
             text = await readCapped(request, PAINTS_BODY_MAX);
