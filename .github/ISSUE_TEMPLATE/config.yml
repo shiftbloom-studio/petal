@@ -6,3 +6,6 @@ contact_links:
   - name: Security problem
     url: https://petal.shiftbloom.studio/imprint
     about: Please report it by mail to the address in the imprint, not in a public issue.
+  - name: How to contribute
+    url: https://github.com/shiftbloom-studio/petal/blob/main/docs/CONTRIBUTING.md
+    about: Read this before you pick up an issue. Comment first, get assigned, then open a pull request.
