@@ -13,7 +13,7 @@ export const preferences: readonly ThemePreference[] = ["system", "light", "dark
 export const storageKey = "theme";
 
 /** The address bar follows the page: paper by day, Ink by night. */
-export const themeColor = { light: "#FFFFFF", dark: "#1A1216" } as const;
+export const themeColor = { light: "#F6F1EE", dark: "#1A1216" } as const;
 
 export function parsePreference(value: unknown): ThemePreference {
     return value === "light" || value === "dark" ? value : "system";

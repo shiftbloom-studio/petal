@@ -43,7 +43,7 @@ export const theme = createTheme({
             secondary: "rgba(26, 18, 22, 0.6)",
             disabled: "rgba(26, 18, 22, 0.4)",
         },
-        background: { default: brand.paper, paper: brand.paper },
+        background: { default: "#F6F1EE", paper: "#FBF8F6" },
         divider: "rgba(26, 18, 22, 0.12)",
         action: { active: brand.ink },
     },
