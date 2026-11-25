@@ -1,5 +1,6 @@
 import Container from "@suid/material/Container";
 
+import Bloom from "~/components/brand/Bloom";
 import Wordmark from "~/components/brand/Wordmark";
 import ThemeToggle from "~/components/ThemeToggle";
 import styles from "./SiteHeader.module.css";
@@ -9,7 +10,10 @@ export default function SiteHeader() {
         <Container component="header">
             <div class={styles.bar}>
                 <a class={styles.product} href="/" aria-label="Petal, start page">
-                    Petal<span class={styles.seed}>.</span>
+                    <Bloom class={styles.mark} />
+                    <span>
+                        Petal<span class={styles.seed}>.</span>
+                    </span>
                 </a>
                 <div class={styles.end}>
                     <a class={styles.studio} href="https://shiftbloom.studio">

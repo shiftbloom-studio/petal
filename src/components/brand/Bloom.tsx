@@ -29,7 +29,6 @@ const RINGS: Ring[] = [
 ];
 
 const BLOOM_RED = "#FF2E52";
-const ROOT_RED = "#C81040";
 
 /** One cubic pair, mirrored: root at the origin, tip at (0, -length). */
 function petal({ width: w, length: l }: Ring) {
@@ -100,8 +99,8 @@ export default function Bloom(props: BloomProps) {
                     </g>
                 )}
             </For>
-            {/* The seed. In the solid bloom it darkens to Root Red so it stays visible. */}
-            <circle r="7" fill={solid() ? ROOT_RED : BLOOM_RED} />
+            {/* The seed, Bloom Red in both variants, as on shiftbloom.studio. */}
+            <circle r="7" fill={BLOOM_RED} />
         </svg>
     );
 }
