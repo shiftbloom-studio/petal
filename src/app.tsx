@@ -175,7 +175,7 @@ export default function App() {
         <Router
             root={(props) => (
                 <MetaProvider>
-                    <Title>Petal — Twitch chat overlay by shiftbloom studio</Title>
+                    <Title>Petal - Twitch chat overlay by shiftbloom studio</Title>
                     <DocumentLanguage />
                     <OverlayMark />
                     <ThemeSync />

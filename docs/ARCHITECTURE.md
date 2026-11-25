@@ -268,7 +268,7 @@ the route rules, and the response of a WebSocket upgrade does not survive that.
 
 | Endpoint                         | Method    | Answer                                               |
 | -------------------------------- | --------- | ---------------------------------------------------- |
-| `/health`                        | GET, HEAD | `{ ok: true, version }` — the running deployment id, or null |
+| `/health`                        | GET, HEAD | `{ ok: true, version }` - the running deployment id, or null |
 | `/api/irc?channel=<login>`       | GET with a WebSocket upgrade | The chat of one channel, in the form of Twitch IRC |
 | `/api/data/<prefix>/<path>`      | GET; POST for 7TV paints | Provider data as JSON, with the header `x-petal-cache` |
 | `/api/status`                    | GET       | Counts as JSON                                       |
@@ -523,21 +523,21 @@ not a proxy for arbitrary URLs.
 
 | Route id             | Gateway path behind `/api/data`         | Fresh  | Served while refreshing | Served when the provider fails | 404 trusted for | Largest answer |
 | -------------------- | --------------------------------------- | ------ | ------ | ------ | ------ | ------ |
-| `7tv.global`         | `/7tv/v3/emote-sets/global`             | 10 min | 1 h    | 7 days | —      | 2 MiB  |
-| `7tv.set`            | `/7tv/v3/emote-sets/<set id>`           | 1 min  | —      | 1 day  | 1 min  | 8 MiB  |
-| `7tv.user`           | `/7tv/v3/users/twitch/<user id>`        | 1 min  | —      | 7 days | 2 min  | 8 MiB  |
-| `7tv.paints`         | `/7tv/v4/gql` (POST)                    | 5 s    | —      | 30 days | 5 min | 1 MiB  |
-| `bttv.global`        | `/bttv/3/cached/emotes/global`          | 10 min | 1 h    | 7 days | —      | 1 MiB  |
+| `7tv.global`         | `/7tv/v3/emote-sets/global`             | 10 min | 1 h    | 7 days | -      | 2 MiB  |
+| `7tv.set`            | `/7tv/v3/emote-sets/<set id>`           | 1 min  | -      | 1 day  | 1 min  | 8 MiB  |
+| `7tv.user`           | `/7tv/v3/users/twitch/<user id>`        | 1 min  | -      | 7 days | 2 min  | 8 MiB  |
+| `7tv.paints`         | `/7tv/v4/gql` (POST)                    | 5 s    | -      | 30 days | 5 min | 1 MiB  |
+| `bttv.global`        | `/bttv/3/cached/emotes/global`          | 10 min | 1 h    | 7 days | -      | 1 MiB  |
 | `bttv.user`          | `/bttv/3/cached/users/twitch/<user id>` | 5 min  | 1 h    | 7 days | 30 min | 2 MiB  |
-| `bttv.badges`        | `/bttv/3/cached/badges/twitch`          | 15 min | 1 h    | 7 days | —      | 1 MiB  |
-| `ffz.global`         | `/ffz/v1/set/global`                    | 10 min | 1 h    | 7 days | —      | 1 MiB  |
+| `bttv.badges`        | `/bttv/3/cached/badges/twitch`          | 15 min | 1 h    | 7 days | -      | 1 MiB  |
+| `ffz.global`         | `/ffz/v1/set/global`                    | 10 min | 1 h    | 7 days | -      | 1 MiB  |
 | `ffz.room`           | `/ffz/v1/room/id/<user id>`             | 5 min  | 1 h    | 7 days | 30 min | 2 MiB  |
-| `ffz.badges`         | `/ffz/v1/badges/ids`                    | 15 min | 1 h    | 7 days | —      | 4 MiB  |
-| `ffzap.supporters`   | `/ffzap/v1/supporters`                  | 30 min | 2 h    | 7 days | —      | 1 MiB  |
-| `chatterino.badges`  | `/chatterino/badges`                    | 1 h    | 4 h    | 7 days | —      | 1 MiB  |
-| `ivr.badges.global`  | `/ivr/v2/twitch/badges/global`          | 1 h    | 4 h    | 7 days | —      | 2 MiB  |
-| `ivr.user`           | `/ivr/v2/twitch/user?login=<login>`     | 1 h    | —      | 7 days | 10 min | 256 KiB |
-| `ivr.badges.channel` | `/ivr/v2/twitch/badges/channel?id=<user id>` | 10 min | — | 7 days | 5 min | 1 MiB |
+| `ffz.badges`         | `/ffz/v1/badges/ids`                    | 15 min | 1 h    | 7 days | -      | 4 MiB  |
+| `ffzap.supporters`   | `/ffzap/v1/supporters`                  | 30 min | 2 h    | 7 days | -      | 1 MiB  |
+| `chatterino.badges`  | `/chatterino/badges`                    | 1 h    | 4 h    | 7 days | -      | 1 MiB  |
+| `ivr.badges.global`  | `/ivr/v2/twitch/badges/global`          | 1 h    | 4 h    | 7 days | -      | 2 MiB  |
+| `ivr.user`           | `/ivr/v2/twitch/user?login=<login>`     | 1 h    | -      | 7 days | 10 min | 256 KiB |
+| `ivr.badges.channel` | `/ivr/v2/twitch/badges/channel?id=<user id>` | 10 min | - | 7 days | 5 min | 1 MiB |
 
 The three windows follow each other. While an answer is fresh it is served without asking the
 provider. In the window after that, lists that every overlay shares are served at once and refreshed

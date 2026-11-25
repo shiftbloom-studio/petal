@@ -28,7 +28,7 @@ export default function NotFound() {
                     }}
                 />
                 <Typography variant="overline" component="p" color="text.secondary">
-                    404 — not found
+                    404 - not found
                 </Typography>
                 <Typography variant="h1" sx={{ maxWidth: "12ch", mx: "auto" }}>
                     Nothing grows here.
