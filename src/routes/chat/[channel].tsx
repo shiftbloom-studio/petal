@@ -66,7 +66,7 @@ export default function Chat() {
             setHomies(DEMO_HOMIES_BADGES);
         } else {
             let wanted = true;
-            fetchHomiesBadges().then((badges) => wanted && setHomies(badges));
+            void fetchHomiesBadges().then((badges) => wanted && setHomies(badges));
             onCleanup(() => {
                 wanted = false;
             });
