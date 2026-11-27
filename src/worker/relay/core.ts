@@ -549,7 +549,7 @@ export class HubCore<Socket extends ClientSocket> {
         if (!pause || now < pause.until) return pause;
         this.#paused = undefined;
         this.#resumed(pause.reason);
-        this.#forgetPause();
+        void this.#forgetPause();
         return undefined;
     }
 
@@ -760,7 +760,7 @@ export class HubCore<Socket extends ClientSocket> {
         if (this.#alarmAt !== 0 && now < this.#alarmAt + this.#config.watchdogMs) return;
         this.#alarmAt = 0;
         this.#count("watchdog-rearmed");
-        this.#arm(now + this.#config.watchdogMs);
+        void this.#arm(now + this.#config.watchdogMs);
     }
 
     #closeOverdue(now: number): void {

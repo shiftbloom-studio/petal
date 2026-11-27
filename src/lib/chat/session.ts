@@ -303,7 +303,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
         const ids = [...paintQueue].slice(0, PAINTS_PER_QUERY);
         for (const id of ids) paintQueue.delete(id);
         if (paintQueue.size > 0) upgradePaints();
-        load("7TV v4 paints", async () => {
+        void load("7TV v4 paints", async () => {
             for (const paint of await fetchSevenTVPaints(ids)) {
                 upgradedPaints.add(paint.id);
                 // The whole paint, since a change of its owner may only touch its shadows.
@@ -354,7 +354,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
                     useSevenTVSet(room, undefined);
                     continue;
                 }
-                load("7TV emote set", async () => {
+                void load("7TV emote set", async () => {
                     // After a failed try the owner may have left the set already.
                     if (room.sevenTVWanted !== setId) return;
                     const set = await fetchSevenTVEmoteSet(setId);
@@ -392,7 +392,7 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
                 if (!sevenTVSets.has(refId)) {
                     sevenTVSets.set(refId, new EmoteSet());
                     // The EventAPI usually follows up with the set's contents; fetch in case not.
-                    load("7TV personal emotes", async () => {
+                    void load("7TV personal emotes", async () => {
                         const set = await fetchSevenTVEmoteSet(refId);
                         for (const emote of sevenTVEmotes(set)) sevenTVSets.get(refId)?.add(emote);
                         for (const owner of personalSetOwners.get(refId) ?? []) {
@@ -544,21 +544,21 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
         room.reload.ffz.request();
         ffz.subscribe(roomId);
 
-        load("Twitch channel badges", async () => {
+        void load("Twitch channel badges", async () => {
             room.twitchBadges = await fetchTwitchChannelBadges(roomId);
             badgesChanged();
         });
     }
 
-    load("7TV global emotes", async () => {
+    void load("7TV global emotes", async () => {
         global.sevenTV = new EmoteSet(await fetchSevenTVGlobalEmotes());
         emotesChanged();
     });
-    load("BTTV global emotes", async () => {
+    void load("BTTV global emotes", async () => {
         global.bttv = new EmoteSet(await fetchBTTVGlobalEmotes());
         emotesChanged();
     });
-    load("FFZ global emotes", async () => {
+    void load("FFZ global emotes", async () => {
         const data = await fetchFFZGlobal();
         for (const [id, emotes] of data.sets) ffzSets.set(id, new EmoteSet(emotes));
         global.ffzDefaultSets = data.defaultSets;
@@ -570,19 +570,19 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
             await task();
             badgesChanged();
         });
-    loadBadges("Twitch global badges", async () => {
+    void loadBadges("Twitch global badges", async () => {
         global.twitchBadges = await fetchTwitchGlobalBadges();
     });
-    loadBadges("BTTV badges", async () => {
+    void loadBadges("BTTV badges", async () => {
         global.bttvBadges = await fetchBTTVBadges();
     });
-    loadBadges("FFZ badges", async () => {
+    void loadBadges("FFZ badges", async () => {
         global.ffzBadges = await fetchFFZBadges();
     });
-    loadBadges("FFZ:AP badges", async () => {
+    void loadBadges("FFZ:AP badges", async () => {
         global.ffzapBadges = await fetchFFZAPBadges();
     });
-    loadBadges("Chatterino badges", async () => {
+    void loadBadges("Chatterino badges", async () => {
         global.chatterinoBadges = await fetchChatterinoBadges();
     });
 
@@ -595,10 +595,9 @@ export function createChatSession(channel: string, options: ChatSessionOptions =
         if (seenIds.has(message.id)) return;
         seenIds.add(message.id);
         if (seenIds.size > SEEN_IDS) {
-            for (const oldest of seenIds) {
-                seenIds.delete(oldest);
-                break;
-            }
+            // Sets keep insertion order, so the first id is the oldest.
+            const oldest = seenIds.values().next().value;
+            if (oldest !== undefined) seenIds.delete(oldest);
         }
         loadRoom(message.roomId);
         setState("messages", (messages) => [...messages.slice(1 - maxMessages), message]);
