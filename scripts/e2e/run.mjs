@@ -1524,7 +1524,7 @@ async function main() {
     };
     for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
         process.once(signal, () => {
-            shutdown().finally(() => process.exit(130));
+            void shutdown().finally(() => process.exit(130));
         });
     }
 

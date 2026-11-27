@@ -480,7 +480,7 @@ export async function startMockTwitch({ port = 0 } = {}) {
 
     const server = createServer((request, response) => {
         const url = new URL(request.url ?? "/", "http://mock");
-        control(request, url)
+        void control(request, url)
             .catch((error) => ({ status: 500, body: { error: String(error) } }))
             .then(({ status, body }) => {
                 response.writeHead(status, { "content-type": "application/json" });

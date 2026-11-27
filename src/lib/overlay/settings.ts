@@ -204,7 +204,8 @@ export function parseIgnoreList(input: string): string[] {
         const login = word.replace(/^@/, "").toLowerCase();
         if (LOGIN.test(login) && logins.size < MAX_IGNORED) logins.add(login);
     }
-    return [...logins].sort();
+    // Code-unit order, the same as a bare sort(), so existing overlay links keep their order.
+    return [...logins].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 export function overlayPath(channel: string, settings: OverlaySettings): string {

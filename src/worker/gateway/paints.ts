@@ -52,7 +52,7 @@ export function parsePaintsRequest(text: string): string[] | undefined {
         return undefined;
     }
     if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined;
-    const keys = Object.keys(body).sort();
+    const keys = Object.keys(body).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     if (keys.length !== 2 || keys[0] !== "query" || keys[1] !== "variables") return undefined;
 
     const { query, variables } = body as { query: unknown; variables: unknown };

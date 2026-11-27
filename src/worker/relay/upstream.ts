@@ -678,10 +678,8 @@ export class UpstreamPool {
         overlap.add(id);
         if (overlap.size <= MAX_OVERLAP_IDS) return;
         // Sets keep insertion order, so the first id is the oldest.
-        for (const oldest of overlap) {
-            overlap.delete(oldest);
-            return;
-        }
+        const oldest = overlap.values().next().value;
+        if (oldest !== undefined) overlap.delete(oldest);
     }
 
     /**
