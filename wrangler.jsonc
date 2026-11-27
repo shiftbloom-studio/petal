@@ -106,6 +106,9 @@
       "enabled": true,
       "head_sampling_rate": 0.1,
       "persist": true
+    },
+    "issues": {
+      "enabled": true
     }
   }
   // The production hostnames `petal.shiftbloom.studio` and `chat.shiftbloom.studio` are
