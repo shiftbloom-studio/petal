@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 const fromFile: Record<string, string> = {};
 if (existsSync(".env")) {
-    for (const line of readFileSync(".env", "utf8").split("\n")) {
+    for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
         const match = line.match(/^\s*([A-Z0-9_]+)\s*=(.*)$/);
         if (match) fromFile[match[1]] = match[2].trim();
     }
